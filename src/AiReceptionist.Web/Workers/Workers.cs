@@ -2,6 +2,7 @@ using AiReceptionist.Core.Abstractions;
 using AiReceptionist.Core.Conversations;
 using AiReceptionist.Core.Data;
 using AiReceptionist.Core.Domain;
+using AiReceptionist.Infrastructure.Calendar;
 using Microsoft.EntityFrameworkCore;
 
 namespace AiReceptionist.Web.Workers;
@@ -85,6 +86,43 @@ public sealed class ChannelPollingWorker : BackgroundService
             }
 
             try { await Task.Delay(delay, ct); }
+            catch (OperationCanceledException) { break; }
+        }
+    }
+}
+
+/// <summary>
+/// Personal Outlook calendars (SignInMode = Personal): keeps a device-code sign-in open until the owner completes it,
+/// and starts a new one if the sign-in ever expires. The code is written to the log and shown on the dashboard.
+/// </summary>
+public sealed class CalendarSignInWorker : BackgroundService
+{
+    private readonly ICalendarProvider _calendar;
+    private readonly ILogger<CalendarSignInWorker> _log;
+
+    public CalendarSignInWorker(ICalendarProvider calendar, ILogger<CalendarSignInWorker> log)
+    {
+        _calendar = calendar;
+        _log = log;
+    }
+
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        if (_calendar is not GraphCalendarProvider graph) return;
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            var delay = TimeSpan.FromSeconds(5);
+            if (graph.NeedsInteractiveSignIn)
+            {
+                try { await graph.SignInAsync(stoppingToken); }
+                catch (Exception ex) when (ex is not OperationCanceledException)
+                {
+                    _log.LogWarning("Outlook calendar sign-in did not complete: {Message} {Detail}. Retrying in 30 s.",
+                        ex.Message, ex.InnerException?.Message);
+                    delay = TimeSpan.FromSeconds(30);
+                }
+            }
+            try { await Task.Delay(delay, stoppingToken); }
             catch (OperationCanceledException) { break; }
         }
     }

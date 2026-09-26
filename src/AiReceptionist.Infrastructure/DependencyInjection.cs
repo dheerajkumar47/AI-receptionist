@@ -61,9 +61,10 @@ public static class DependencyInjection
         services.AddSingleton<FileMediaStore>();
         services.AddSingleton<IMediaStore>(sp => sp.GetRequiredService<FileMediaStore>());
 
+        services.AddSingleton<GraphCalendarProvider>();
         services.AddSingleton<ICalendarProvider>(sp =>
             sp.GetRequiredService<IOptions<GraphCalendarOptions>>().Value.IsConfigured
-                ? ActivatorUtilities.CreateInstance<GraphCalendarProvider>(sp)
+                ? sp.GetRequiredService<GraphCalendarProvider>()
                 : new NullCalendarProvider());
         services.AddSingleton<IEmailSender>(sp =>
             sp.GetRequiredService<IOptions<SmtpOptions>>().Value.IsConfigured

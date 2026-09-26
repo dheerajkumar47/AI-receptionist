@@ -2,6 +2,7 @@
 @inherits LiveComponentBase
 @using Microsoft.Extensions.Options
 @using AiReceptionist.Infrastructure
+@using AiReceptionist.Infrastructure.Calendar
 @inject IEnumerable<IChannelConnector> ChannelConnectors
 @inject IIntentEngine Engine
 @inject IVoiceSynthesizer Voice
@@ -11,6 +12,14 @@
 
 <PageTitle>Dashboard · AI Receptionist</PageTitle>
 <h1>Dashboard</h1>
+
+@if (Calendar is GraphCalendarProvider { NeedsInteractiveSignIn: true } graph)
+{
+    <div class="notice warn">
+        <strong>Connect your Outlook calendar:</strong>
+        @(graph.SignInPrompt ?? "Preparing a sign-in code… refresh this page in a few seconds.")
+    </div>
+}
 
 <div class="stats">
     <div class="stat"><span>@_messagesToday</span>messages today</div>
@@ -25,7 +34,7 @@
         <table class="table">
             <tr><td>Language understanding</td><td>@Engine.Name</td><td>@Status(Engine is not KeywordIntentEngine, "offline mode")</td></tr>
             <tr><td>Voice (Azure AI Speech)</td><td></td><td>@Status(Voice.IsConfigured)</td></tr>
-            <tr><td>Microsoft 365 calendar</td><td></td><td>@Status(Calendar.IsConfigured)</td></tr>
+            <tr><td>Outlook / Microsoft 365 calendar</td><td></td><td>@Status(Calendar is GraphCalendarProvider g ? !g.NeedsInteractiveSignIn : Calendar.IsConfigured, Calendar.IsConfigured ? "sign-in needed" : "not configured")</td></tr>
             <tr><td>Email fallback (SMTP)</td><td>@Email.OwnerAddress</td><td>@Status(Email.IsConfigured)</td></tr>
         </table>
     </section>

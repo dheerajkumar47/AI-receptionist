@@ -16,6 +16,7 @@ builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true, relo
 builder.Services.AddAiReceptionist(builder.Configuration);
 builder.Services.AddHostedService<InboundProcessingWorker>();
 builder.Services.AddHostedService<ChannelPollingWorker>();
+builder.Services.AddHostedService<CalendarSignInWorker>();
 
 builder.Services.AddRazorComponents().AddInteractiveServerComponents();
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)

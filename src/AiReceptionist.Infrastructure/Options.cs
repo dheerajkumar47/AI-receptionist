@@ -73,9 +73,19 @@ public sealed class GraphCalendarOptions
     /// <summary>Send Outlook invitations to the customer when their email is known.</summary>
     public bool InviteCustomer { get; set; } = true;
 
-    public bool IsConfigured =>
-        !string.IsNullOrWhiteSpace(TenantId) && !string.IsNullOrWhiteSpace(ClientId) &&
-        !string.IsNullOrWhiteSpace(ClientSecret) && !string.IsNullOrWhiteSpace(CalendarUser);
+    /// <summary>"App" (Microsoft 365 business tenant, client secret) or "Personal" (Outlook.com / any Microsoft
+    /// account, one-time device-code sign-in; only ClientId is required).</summary>
+    public string SignInMode { get; set; } = "App";
+
+    /// <summary>Personal mode: where the signed-in account is remembered between restarts.</summary>
+    public string AuthRecordPath { get; set; } = "data/graph-auth.json";
+
+    public bool IsPersonal => SignInMode.Equals("Personal", StringComparison.OrdinalIgnoreCase);
+
+    public bool IsConfigured => IsPersonal
+        ? !string.IsNullOrWhiteSpace(ClientId)
+        : !string.IsNullOrWhiteSpace(TenantId) && !string.IsNullOrWhiteSpace(ClientId) &&
+          !string.IsNullOrWhiteSpace(ClientSecret) && !string.IsNullOrWhiteSpace(CalendarUser);
 }
 
 public sealed class SmtpOptions

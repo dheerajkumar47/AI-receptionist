@@ -107,6 +107,42 @@ The same key enables transcription of inbound WhatsApp voice notes (`Speech:Reco
 
 ## 5. Microsoft 365 calendar
 
+There are two sign-in modes. Pick the one that matches your account:
+
+| Mode | For | Secret needed | Section |
+|---|---|---|---|
+| `Personal` | Outlook.com / Hotmail / any **personal Microsoft account** (including one registered with a Gmail address) | No, you sign in once with a code | 5a |
+| `App` (default) | A **Microsoft 365 business** tenant | Yes, a client secret | 5b |
+
+### 5a. Personal Outlook calendar (SignInMode = Personal)
+
+1. Check that you have a calendar: sign in at https://outlook.live.com/calendar with your Microsoft account.
+2. In the [Azure portal](https://portal.azure.com), search **App registrations** → **New registration**.
+   - Name: `AI Receptionist`
+   - Supported account types: **Personal Microsoft accounts only**
+   - Redirect URI: leave empty → **Register**
+   - Copy the **Application (client) ID**.
+3. Left menu → **Authentication** → *Advanced settings* → **Allow public client flows: Yes** → **Save**.
+   (This setting is required for the device-code sign-in.)
+4. Left menu → **API permissions** → **Add a permission** → *Microsoft Graph* → **Delegated permissions** →
+   `Calendars.ReadWrite` → **Add permissions**. You don't need admin consent; you approve it yourself when you sign in.
+5. Configure (app stopped):
+   ```bash
+   dotnet user-secrets set "Microsoft365:SignInMode" "Personal" --project src/AiReceptionist.Web
+   dotnet user-secrets set "Microsoft365:ClientId" "<application-client-id>" --project src/AiReceptionist.Web
+   ```
+6. Start the app and open the **Dashboard**. A yellow box says *"Connect your Outlook calendar: To sign in, open
+   https://microsoft.com/devicelogin and enter the code XXXXXXXX"*. The same line is also printed in the terminal.
+   Open the link, enter the code, sign in with your Microsoft account and click **Accept**.
+7. Within a few seconds the terminal logs *"Outlook calendar connected as ..."* and the Dashboard shows the calendar
+   as **active**. The sign-in is remembered in `data/graph-auth.json` plus the OS-protected token cache, so restarts don't ask again.
+
+✅ **Settings → Check availability now** says *Microsoft 365 calendar read OK*. Booking in the Simulator creates an
+event in https://outlook.live.com/calendar.
+
+### 5b. Microsoft 365 business tenant (SignInMode = App)
+
+
 The app writes events with **Microsoft Graph** using an Entra ID app registration with *application* permissions
 (client-credentials flow), so no user has to stay signed in.
 
@@ -294,7 +330,7 @@ implement `IWebhookChannel` on `TwitterDmChannel` (see ARCHITECTURE.md).
 | `OpenAI:Endpoint` / `ApiKey` / `Deployment` / `Temperature` | | Language model settings. If no key is set, the offline engine is used. |
 | `Speech:Key` / `Region` / `RecognitionLanguage` | | Azure AI Speech. If unset, replies are text only. |
 | `Media:Directory` | `data/media` | Where generated audio is stored (served at `/media`). |
-| `Microsoft365:TenantId` / `ClientId` / `ClientSecret` / `CalendarUser` / `InviteCustomer` | | Graph calendar. If unset, bookings use email. |
+| `Microsoft365:SignInMode` / `TenantId` / `ClientId` / `ClientSecret` / `CalendarUser` / `InviteCustomer` / `AuthRecordPath` | `App` | Graph calendar (`Personal` = Outlook.com with device-code sign-in). If unset, bookings use email. |
 | `Email:Host` / `Port` / `Security` / `Username` / `Password` / `FromAddress` / `FromName` / `OwnerAddress` / `PickupDirectory` | | Email fallback. |
 | `Meta:AppSecret` / `VerifyToken` / `GraphApiVersion` / `GraphBaseUrl` | `v21.0`, `https://graph.facebook.com` | Shared Meta settings. |
 | `Meta:Facebook:PageAccessToken` | | Messenger. |
