@@ -257,6 +257,28 @@ All three channels run through one Meta app.
      ```
 4. Test by sending a DM to the Instagram account from a tester account.
 
+### 7.4a WhatsApp via Twilio (fastest: no Meta business verification)
+
+Meta only delivers real messages to a **published** app, and publishing a WhatsApp app requires business verification.
+Twilio is an official WhatsApp Business Solution Provider, and its **WhatsApp Sandbox** works immediately.
+When `Twilio:AccountSid` and `Twilio:AuthToken` are set, the app uses Twilio for WhatsApp instead of Meta's Cloud API.
+
+1. Sign up at https://www.twilio.com/try-twilio (free trial; verify your email and phone).
+2. Console home: copy the **Account SID** and **Auth Token**.
+3. Console → **Messaging → Try it out → Send a WhatsApp message**. From your phone, send the shown code
+   (e.g. `join happy-tiger`) to **+1 415 523 8886** on WhatsApp.
+4. On the same page, open **Sandbox settings** and set **When a message comes in** to
+   `https://<public-url>/webhooks/whatsapp`, method **POST** → **Save**.
+5. Configure:
+   ```bash
+   dotnet user-secrets set "Twilio:AccountSid" "ACxxxxxxxx" --project src/AiReceptionist.Web
+   dotnet user-secrets set "Twilio:AuthToken" "<auth token>" --project src/AiReceptionist.Web
+   ```
+6. Restart. The dashboard shows **WhatsApp (via Twilio)** as active. Message the sandbox number from your phone.
+
+The sandbox is for testing: each tester joins with the code, and must re-join after 72 hours without messages.
+For production, register your own WhatsApp sender in Twilio and set `Twilio:WhatsAppFrom` (e.g. `whatsapp:+15551234567`).
+
 ### 7.4 WhatsApp (Cloud API)
 
 1. *WhatsApp → API Setup*: Meta provides a **test phone number**. Copy its **Phone number ID** (not the phone number itself).

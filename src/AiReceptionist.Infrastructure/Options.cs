@@ -181,3 +181,20 @@ public sealed class TwitterOptions
         !string.IsNullOrWhiteSpace(ConsumerKey) && !string.IsNullOrWhiteSpace(ConsumerSecret) &&
         !string.IsNullOrWhiteSpace(AccessToken) && !string.IsNullOrWhiteSpace(AccessTokenSecret);
 }
+
+public sealed class TwilioOptions
+{
+    public const string SectionName = "Twilio";
+
+    /// <summary>Account SID from the Twilio Console home page (starts with "AC").</summary>
+    public string? AccountSid { get; set; }
+
+    public string? AuthToken { get; set; }
+
+    /// <summary>Twilio WhatsApp sender. The shared WhatsApp Sandbox number is +14155238886.</summary>
+    public string WhatsAppFrom { get; set; } = "whatsapp:+14155238886";
+
+    public string ApiBaseUrl { get; set; } = "https://api.twilio.com";
+
+    public bool IsConfigured => !string.IsNullOrWhiteSpace(AccountSid) && !string.IsNullOrWhiteSpace(AuthToken);
+}

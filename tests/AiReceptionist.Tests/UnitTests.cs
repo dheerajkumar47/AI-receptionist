@@ -379,3 +379,90 @@ public class PersonalCalendarCredentialTests
             await credential.GetTokenAsync(new Azure.Core.TokenRequestContext(new[] { "x" }), default));
     }
 }
+
+public class TwilioWhatsAppTests
+{
+    private const string Token = "twilio-auth-token";
+    private const string Url = "https://bot.example.com/webhooks/whatsapp";
+
+    private sealed class Capture : HttpMessageHandler
+    {
+        public HttpRequestMessage? Request;
+        public string? Body;
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+        {
+            Request = request;
+            Body = request.Content is null ? null : await request.Content.ReadAsStringAsync(ct);
+            return new HttpResponseMessage(System.Net.HttpStatusCode.Created) { Content = new StringContent("{\"sid\":\"SM123\"}") };
+        }
+    }
+
+    private sealed class Factory : IHttpClientFactory
+    {
+        private readonly HttpMessageHandler _h;
+        public Factory(HttpMessageHandler h) => _h = h;
+        public HttpClient CreateClient(string name) => new(_h, disposeHandler: false);
+    }
+
+    private static AiReceptionist.Infrastructure.Channels.Twilio.TwilioWhatsAppChannel Channel(HttpMessageHandler? h = null) =>
+        new(new Factory(h ?? new Capture()),
+            Microsoft.Extensions.Options.Options.Create(new AiReceptionist.Infrastructure.TwilioOptions { AccountSid = "AC1", AuthToken = Token }),
+            Microsoft.Extensions.Options.Options.Create(new AiReceptionist.Infrastructure.AppOptions { PublicBaseUrl = "https://bot.example.com/" }));
+
+    private const string Form = "SmsMessageSid=SM9&NumMedia=0&ProfileName=Ali+Khan&MessageSid=SM9&Body=Hi+there%21&From=whatsapp%3A%2B923001234567&To=whatsapp%3A%2B14155238886";
+
+    [Fact]
+    public void Signature_matches_twilios_published_example()
+    {
+        var form = new Dictionary<string, string>
+        {
+            ["CallSid"] = "CA1234567890ABCDE", ["Digits"] = "1234", ["From"] = "+14158675309",
+            ["To"] = "+18005551212", ["Caller"] = "+14158675309",
+        };
+        Assert.Equal("RSOYDt4T1cUTdK1PDd93/VVr8B8=",
+            AiReceptionist.Infrastructure.Channels.Twilio.TwilioWhatsAppChannel.Sign("https://mycompany.com/myapp.php?foo=1&bar=2", form, "12345"));
+    }
+
+    [Fact]
+    public void Validates_twilio_signature_over_url_and_sorted_params()
+    {
+        var sig = AiReceptionist.Infrastructure.Channels.Twilio.TwilioWhatsAppChannel.Sign(Url,
+            AiReceptionist.Infrastructure.Channels.Twilio.TwilioWhatsAppChannel.ParseForm(Form), Token);
+        var channel = Channel();
+
+        Assert.True(channel.ValidateSignature(h => h == "X-Twilio-Signature" ? sig : null, Encoding.UTF8.GetBytes(Form)));
+        Assert.False(channel.ValidateSignature(h => h == "X-Twilio-Signature" ? sig : null, Encoding.UTF8.GetBytes(Form.Replace("Hi", "Yo"))));
+        Assert.False(channel.ValidateSignature(_ => null, Encoding.UTF8.GetBytes(Form)));
+    }
+
+    [Fact]
+    public void Parses_text_and_voice_messages()
+    {
+        var text = Assert.Single(Channel().ParsePayload(Form));
+        Assert.Equal(("923001234567", "Ali Khan", "Hi there!", "SM9"), (text.SenderId, text.SenderName, text.Text, text.ExternalMessageId));
+
+        var voice = Assert.Single(Channel().ParsePayload(
+            "MessageSid=SM10&From=whatsapp%3A%2B923001234567&NumMedia=1&MediaContentType0=audio%2Fogg&MediaUrl0=https%3A%2F%2Fapi.twilio.com%2Fmedia%2FME1"));
+        Assert.True(voice.IsVoice);
+        Assert.Equal("https://api.twilio.com/media/ME1", voice.AudioReference);
+    }
+
+    [Fact]
+    public async Task Sends_text_and_voice_via_messages_api()
+    {
+        var capture = new Capture();
+        var channel = Channel(capture);
+
+        var result = await channel.SendAsync(new OutboundMessage("whatsapp", "923001234567", "Hello!"), default);
+        Assert.True(result.Success);
+        Assert.Equal("SM123", result.ExternalId);
+        Assert.Equal("https://api.twilio.com/2010-04-01/Accounts/AC1/Messages.json", capture.Request!.RequestUri!.ToString());
+        Assert.Equal("Basic", capture.Request.Headers.Authorization!.Scheme);
+        Assert.Contains("To=whatsapp%3A%2B923001234567", capture.Body);
+        Assert.Contains("From=whatsapp%3A%2B14155238886", capture.Body);
+        Assert.Contains("Body=Hello%21", capture.Body);
+
+        await channel.SendAsync(new OutboundMessage("whatsapp", "923001234567", null, "https://bot.example.com/media/a.ogg"), default);
+        Assert.Contains("MediaUrl=https%3A%2F%2Fbot.example.com%2Fmedia%2Fa.ogg", capture.Body);
+    }
+}

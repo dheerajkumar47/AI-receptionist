@@ -6,6 +6,7 @@ using AiReceptionist.Infrastructure.AI;
 using AiReceptionist.Infrastructure.Calendar;
 using AiReceptionist.Infrastructure.Channels.Meta;
 using AiReceptionist.Infrastructure.Channels.Simulator;
+using AiReceptionist.Infrastructure.Channels.Twilio;
 using AiReceptionist.Infrastructure.Channels.Twitter;
 using AiReceptionist.Infrastructure.Email;
 using AiReceptionist.Infrastructure.Voice;
@@ -32,6 +33,7 @@ public static class DependencyInjection
         services.Configure<SmtpOptions>(config.GetSection(SmtpOptions.SectionName));
         services.Configure<MetaOptions>(config.GetSection(MetaOptions.SectionName));
         services.Configure<TwitterOptions>(config.GetSection(TwitterOptions.SectionName));
+        services.Configure<TwilioOptions>(config.GetSection(TwilioOptions.SectionName));
 
         var connectionString = config.GetConnectionString("Receptionist") ?? "Data Source=data/receptionist.db";
         services.AddDbContextFactory<ReceptionistDbContext>(o => o.UseSqlite(connectionString));
@@ -42,6 +44,7 @@ public static class DependencyInjection
 
         services.AddHttpClient(MetaChannelBase.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(30));
         services.AddHttpClient(TwitterDmChannel.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(30));
+        services.AddHttpClient(TwilioWhatsAppChannel.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(30));
         services.AddHttpClient(AzureSpeechSynthesizer.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(30));
 
         // Language understanding: Azure OpenAI / OpenAI when configured, otherwise the offline keyword engine.
@@ -75,7 +78,11 @@ public static class DependencyInjection
         // and register it here. The webhook route, poller and dashboard pick it up automatically.
         services.AddSingleton<IChannelConnector, FacebookMessengerChannel>();
         services.AddSingleton<IChannelConnector, InstagramChannel>();
-        services.AddSingleton<IChannelConnector, WhatsAppChannel>();
+        // WhatsApp: Twilio (no Meta business verification needed) when configured, otherwise Meta's Cloud API directly.
+        services.AddSingleton<IChannelConnector>(sp =>
+            sp.GetRequiredService<IOptions<TwilioOptions>>().Value.IsConfigured
+                ? ActivatorUtilities.CreateInstance<TwilioWhatsAppChannel>(sp)
+                : ActivatorUtilities.CreateInstance<WhatsAppChannel>(sp));
         services.AddSingleton<IChannelConnector, TwitterDmChannel>();
         services.AddSingleton<IChannelConnector, SimulatorChannel>();
 
