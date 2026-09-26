@@ -39,16 +39,28 @@ public static class AuthEndpoints
     {
         app.MapGet("/login", (HttpContext ctx, IAntiforgery antiforgery, string? returnUrl, bool? failed) =>
         {
+            if (ctx.User.Identity?.IsAuthenticated == true) return Results.LocalRedirect(SafeReturnUrl(returnUrl));
             var tokens = antiforgery.GetAndStoreTokens(ctx);
             return Results.Content(LoginPage(tokens, returnUrl, failed == true), "text/html");
         }).AllowAnonymous();
 
         app.MapPost("/login", async (HttpContext ctx, IAntiforgery antiforgery, AdminCredentials credentials) =>
         {
-            await antiforgery.ValidateRequestAsync(ctx);
             var form = await ctx.Request.ReadFormAsync();
-            var returnUrl = form["returnUrl"].ToString();
-            if (string.IsNullOrEmpty(returnUrl) || !returnUrl.StartsWith('/') || returnUrl.StartsWith("//")) returnUrl = "/";
+            var returnUrl = SafeReturnUrl(form["returnUrl"].ToString());
+
+            // Already signed in (e.g. the form was re-submitted from the back button or another tab): just continue.
+            if (ctx.User.Identity?.IsAuthenticated == true) return Results.LocalRedirect(returnUrl);
+
+            try
+            {
+                await antiforgery.ValidateRequestAsync(ctx);
+            }
+            catch (AntiforgeryValidationException)
+            {
+                // Stale or foreign form: show a fresh login page instead of an error.
+                return Results.Redirect($"/login?returnUrl={Uri.EscapeDataString(returnUrl)}");
+            }
 
             if (!credentials.Check(form["username"], form["password"]))
                 return Results.Redirect($"/login?failed=true&returnUrl={Uri.EscapeDataString(returnUrl)}");
@@ -64,6 +76,11 @@ public static class AuthEndpoints
             return Results.Redirect("/login");
         });
     }
+
+    private static string SafeReturnUrl(string? returnUrl) =>
+        string.IsNullOrEmpty(returnUrl) || !returnUrl.StartsWith('/') || returnUrl.StartsWith("//") || returnUrl.StartsWith("/\\")
+            ? "/"
+            : returnUrl;
 
     private static string LoginPage(AntiforgeryTokenSet tokens, string? returnUrl, bool failed) => $$"""
         <!DOCTYPE html>

@@ -79,6 +79,32 @@ public sealed class WebhookIntegrationTests : IClassFixture<WebhookIntegrationTe
         Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/login")).StatusCode);
     }
 
+    [Fact]
+    public async Task Login_works_and_resubmitting_the_form_does_not_crash()
+    {
+        var client = _factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false, HandleCookies = true });
+        var page = await client.GetStringAsync("/login");
+        var token = System.Text.RegularExpressions.Regex.Match(page, "name=\"__RequestVerificationToken\" value=\"([^\"]+)\"").Groups[1].Value;
+        Assert.NotEmpty(token);
+
+        FormUrlEncodedContent Form() => new(new Dictionary<string, string>
+        {
+            ["__RequestVerificationToken"] = System.Net.WebUtility.HtmlDecode(token),
+            ["returnUrl"] = "/",
+            ["username"] = "admin",
+            ["password"] = "pw",
+        });
+
+        var first = await client.PostAsync("/login", Form());
+        Assert.Equal(HttpStatusCode.Redirect, first.StatusCode);
+        Assert.Equal("/", first.Headers.Location!.OriginalString);
+
+        // Same (now stale) form again, as happens with the back button: must redirect, not throw.
+        var second = await client.PostAsync("/login", Form());
+        Assert.Equal(HttpStatusCode.Redirect, second.StatusCode);
+        Assert.Equal("/", second.Headers.Location!.OriginalString);
+    }
+
     private static async Task<T> WaitAsync<T>(Func<Task<T?>> probe) where T : class
     {
         for (var i = 0; i < 100; i++)
