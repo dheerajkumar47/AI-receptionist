@@ -234,6 +234,8 @@ public sealed class ConversationService
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _log.LogError(ex, "Intent engine {Engine} failed for conversation {Conversation}.", _engine.Name, conversation.Id);
+            // Shown under the customer's message in the dashboard so the admin can see why the AI failed.
+            current.Error = $"{_engine.Name}: {ex.Message}";
             return new ReplyDecision(settings.HandoffMessage, settings.DefaultReplyMode, "EngineError", null, NeedsAttention: true);
         }
 
