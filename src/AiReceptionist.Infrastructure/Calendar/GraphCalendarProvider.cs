@@ -186,10 +186,11 @@ public sealed class GraphCalendarProvider : ICalendarProvider
         {
             return await call();
         }
-        catch (AuthenticationRequiredException)
+        catch (AuthenticationRequiredException ex)
         {
+            _log.LogWarning(ex, "Outlook calendar token could not be refreshed silently: {Reason}", ex.InnerException?.Message ?? ex.Message);
             IsSignedIn = false; // the sign-in worker will show a new device code
-            throw new InvalidOperationException("Outlook calendar sign-in expired; sign in again with the code on the dashboard.");
+            throw new InvalidOperationException("Outlook calendar sign-in expired; sign in again with the code on the dashboard.", ex);
         }
     }
 
