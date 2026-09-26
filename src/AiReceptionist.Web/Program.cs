@@ -62,6 +62,7 @@ app.UseAuthorization();
 app.UseAntiforgery();
 
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
+app.MapPrivacyEndpoint();
 app.MapWebhookEndpoints();
 app.MapAuthEndpoints();
 

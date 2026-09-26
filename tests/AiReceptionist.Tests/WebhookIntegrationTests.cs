@@ -70,6 +70,14 @@ public sealed class WebhookIntegrationTests : IClassFixture<WebhookIntegrationTe
     }
 
     [Fact]
+    public async Task Privacy_policy_is_public()
+    {
+        var response = await _factory.CreateClient().GetAsync("/privacy");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Contains("Privacy Policy", await response.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
     public async Task Dashboard_requires_sign_in()
     {
         var client = _factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
