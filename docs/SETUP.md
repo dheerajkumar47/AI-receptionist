@@ -71,16 +71,16 @@ The webhook endpoints are:
 ## 3. Azure OpenAI
 
 1. In the [Azure portal](https://portal.azure.com), create an **Azure OpenAI** resource, or an *Azure AI Foundry* resource that includes Azure OpenAI.
-2. Open it in **Azure AI Foundry** → *Deployments* → **Deploy model**, and choose a chat model that supports JSON output, such as `gpt-4o-mini`. Note the **deployment name**.
+2. Open it in **Azure AI Foundry** → *Deployments* → **Deploy model**, and choose a chat model that supports JSON output, such as `gpt-4.1-mini`. Note the **deployment name**.
 3. Under *Keys and Endpoint*, copy **Endpoint** and **Key 1**.
 4. Configure:
    ```bash
    dotnet user-secrets set "OpenAI:Endpoint"   "https://<resource>.openai.azure.com/"
    dotnet user-secrets set "OpenAI:ApiKey"     "<key>"
-   dotnet user-secrets set "OpenAI:Deployment" "gpt-4o-mini"
+   dotnet user-secrets set "OpenAI:Deployment" "gpt-4.1-mini"
    ```
    To use OpenAI directly instead, set `OpenAI:Provider` = `OpenAI`, set `OpenAI:ApiKey`, and set `OpenAI:Deployment` to the model name. Leave the endpoint empty.
-5. Restart the app. The dashboard should show *Language understanding: AzureOpenAI (gpt-4o-mini)*. Re-run the simulator conversation.
+5. Restart the app. The dashboard should show *Language understanding: AzureOpenAI (gpt-4.1-mini)*. Re-run the simulator conversation.
 
 **How the AI is steered.** The system prompt is assembled at run time from **Settings** (persona, business description,
 hours, time zone) and **Intents** (name, description, examples, guidance), plus the live free time from your calendar.

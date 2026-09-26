@@ -38,14 +38,27 @@ public sealed class OpenAiIntentEngine : IIntentEngine
             messages.Add(turn.FromCustomer ? new UserChatMessage(turn.Text) : new AssistantChatMessage(turn.Text));
         messages.Add(new UserChatMessage(ctx.UserMessage));
 
+        // Reasoning models (gpt-5, o-series) reject a custom temperature, so it is only sent when configured.
+        // The output limit is generous because reasoning models spend part of it on hidden reasoning.
         var options = new ChatCompletionOptions
         {
             ResponseFormat = ChatResponseFormat.CreateJsonObjectFormat(),
             Temperature = _options.Temperature,
-            MaxOutputTokenCount = 400,
+            MaxOutputTokenCount = 4000,
         };
 
-        ChatCompletion completion = await _chat.CompleteChatAsync(messages, options, ct);
+        ChatCompletion completion;
+        try
+        {
+            completion = await _chat.CompleteChatAsync(messages, options, ct);
+        }
+        catch (ClientResultException ex) when (ex.Status == 400 && options.Temperature is not null &&
+                                                ex.Message.Contains("temperature", StringComparison.OrdinalIgnoreCase))
+        {
+            _log.LogWarning("Model {Deployment} does not accept a temperature; retrying without it.", _options.Deployment);
+            options.Temperature = null;
+            completion = await _chat.CompleteChatAsync(messages, options, ct);
+        }
         var json = completion.Content.Count > 0 ? completion.Content[0].Text : "{}";
         _log.LogDebug("LLM response: {Json}", json);
         return Parse(json, ctx);

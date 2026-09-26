@@ -24,10 +24,11 @@ public sealed class OpenAiOptions
 
     public string? ApiKey { get; set; }
 
-    /// <summary>Azure deployment name, or OpenAI model name (e.g. gpt-4o-mini).</summary>
-    public string Deployment { get; set; } = "gpt-4o-mini";
+    /// <summary>Azure deployment name, or OpenAI model name (e.g. gpt-4.1-mini, gpt-5-mini).</summary>
+    public string Deployment { get; set; } = "gpt-4.1-mini";
 
-    public float Temperature { get; set; } = 0.3f;
+    /// <summary>Optional. Leave empty for reasoning models (gpt-5 family), which only accept the default.</summary>
+    public float? Temperature { get; set; }
 
     public bool IsConfigured =>
         !string.IsNullOrWhiteSpace(ApiKey) &&
