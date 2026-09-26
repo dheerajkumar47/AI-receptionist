@@ -1,0 +1,63 @@
+@page "/appointments"
+@inherits LiveComponentBase
+@inject ConversationService Service
+
+<PageTitle>Appointments · AI Receptionist</PageTitle>
+<h1>Appointments</h1>
+
+<div class="toolbar">
+    <label class="check"><input type="checkbox" @bind="_includePast" @bind:after="LoadAsync" /> Include past &amp; cancelled</label>
+</div>
+@if (_error is not null) { <div class="notice danger">@_error</div> }
+
+<section class="card">
+    <table class="table">
+        <thead><tr><th>When</th><th>Customer</th><th>Channel</th><th>Subject</th><th>Status</th><th>Method</th><th></th></tr></thead>
+        <tbody>
+        @foreach (var a in _items)
+        {
+            <tr>
+                <td class="nowrap">@Local(a.StartUtc)</td>
+                <td><a href="conversations/@a.ConversationId">@(a.CustomerName ?? "Unknown")</a><div class="small muted">@a.CustomerEmail</div></td>
+                <td>@Ui.ChannelIcon(a.Conversation.Channel)</td>
+                <td>@a.Subject</td>
+                <td><span class="@Ui.AppointmentClass(a.Status)">@a.Status</span>@if (a.Error is not null) { <div class="small error">@a.Error</div> }</td>
+                <td>@a.Method @if (a.WebLink is not null) { <a href="@a.WebLink" target="_blank" class="small">open</a> }</td>
+                <td>
+                    @if (a.Status is AppointmentStatus.Booked or AppointmentStatus.EmailFallback && a.StartUtc > DateTime.UtcNow)
+                    {
+                        <button class="btn small danger" @onclick="@(() => Cancel(a.Id))">Cancel</button>
+                    }
+                </td>
+            </tr>
+        }
+        </tbody>
+    </table>
+    @if (_items.Count == 0) { <p class="muted">No appointments.</p> }
+</section>
+
+@code {
+    private bool _includePast;
+    private string? _error;
+    private List<Appointment> _items = new();
+
+    protected override bool ShouldReload(ActivityEvent evt) => evt.Kind == ActivityKind.AppointmentChanged;
+
+    protected override async Task LoadAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var q = db.Appointments.AsNoTracking().Include(a => a.Conversation).AsQueryable();
+        if (!_includePast)
+        {
+            var now = DateTime.UtcNow;
+            q = q.Where(a => a.EndUtc > now && a.Status != AppointmentStatus.Cancelled);
+        }
+        _items = await q.OrderBy(a => a.StartUtc).Take(500).ToListAsync();
+    }
+
+    private async Task Cancel(int id)
+    {
+        _error = await Service.CancelAppointmentAsync(id);
+        await LoadAsync();
+    }
+}

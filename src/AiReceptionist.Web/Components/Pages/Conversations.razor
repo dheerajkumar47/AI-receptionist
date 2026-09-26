@@ -1,0 +1,61 @@
+@page "/conversations"
+@inherits LiveComponentBase
+
+<PageTitle>Conversations · AI Receptionist</PageTitle>
+<h1>Conversations</h1>
+
+<div class="toolbar">
+    <select @bind="_channel" @bind:after="LoadAsync">
+        <option value="">All channels</option>
+        @foreach (var c in new[] { Channels.Facebook, Channels.Instagram, Channels.WhatsApp, Channels.Twitter, Channels.Simulator })
+        {
+            <option value="@c">@Ui.ChannelIcon(c) @c</option>
+        }
+    </select>
+    <input placeholder="Search name or id…" @bind="_search" @bind:event="oninput" @bind:after="LoadAsync" />
+    <label class="check"><input type="checkbox" @bind="Attention" @bind:after="LoadAsync" /> Needs attention only</label>
+</div>
+
+<section class="card">
+    <table class="table">
+        <thead><tr><th>Contact</th><th>Channel</th><th>Mode</th><th>Last intent</th><th>Last activity</th><th></th></tr></thead>
+        <tbody>
+        @foreach (var c in _items)
+        {
+            <tr class="clickable" @onclick="@(() => Nav.NavigateTo($"conversations/{c.Id}"))">
+                <td><strong>@(c.Contact.DisplayName ?? "Unknown")</strong><div class="small muted">@c.Contact.ExternalUserId</div></td>
+                <td>@Ui.ChannelIcon(c.Channel) @c.Channel</td>
+                <td><span class="@(c.Mode == ConversationMode.Bot ? "badge ok" : "badge warn")">@(c.Mode == ConversationMode.Bot ? "Bot" : "Human")</span></td>
+                <td>@c.LastIntent</td>
+                <td class="nowrap">@Local(c.LastActivityUtc)</td>
+                <td>@if (c.NeedsAttention) { <span class="badge danger">attention</span> }</td>
+            </tr>
+        }
+        </tbody>
+    </table>
+    @if (_items.Count == 0) { <p class="muted">No conversations match.</p> }
+</section>
+
+@code {
+    [Inject] private NavigationManager Nav { get; set; } = default!;
+    [SupplyParameterFromQuery(Name = "attention")] public bool Attention { get; set; }
+
+    private string _channel = "";
+    private string _search = "";
+    private List<Conversation> _items = new();
+
+    protected override async Task LoadAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var q = db.Conversations.AsNoTracking().Include(c => c.Contact).AsQueryable();
+        if (!string.IsNullOrEmpty(_channel)) q = q.Where(c => c.Channel == _channel);
+        if (Attention) q = q.Where(c => c.NeedsAttention);
+        if (!string.IsNullOrWhiteSpace(_search))
+        {
+            var s = _search.Trim();
+            q = q.Where(c => (c.Contact.DisplayName != null && EF.Functions.Like(c.Contact.DisplayName, $"%{s}%")) ||
+                             EF.Functions.Like(c.Contact.ExternalUserId, $"%{s}%"));
+        }
+        _items = await q.OrderByDescending(c => c.LastActivityUtc).Take(200).ToListAsync();
+    }
+}

@@ -1,0 +1,94 @@
+@page "/simulator"
+@inherits LiveComponentBase
+@inject IInboundQueue Queue
+
+<PageTitle>Simulator · AI Receptionist</PageTitle>
+<div class="page-header">
+    <div>
+        <h1>Simulator</h1>
+        <p class="muted">Chat with the receptionist as a customer. Messages go through exactly the same pipeline as real DMs
+            (rules, AI, voice, calendar booking) — only delivery is skipped.</p>
+    </div>
+    <div class="actions"><button class="btn" @onclick="NewCustomer">New customer</button></div>
+</div>
+
+<div class="grid-main">
+    <section class="card thread">
+        @if (_messages.Count == 0) { <p class="muted">Say hello to start. Try: “Hi, can I book an appointment tomorrow afternoon?” then “Yes please”.</p> }
+        @foreach (var m in _messages)
+        {
+            <div class="bubble @(m.Direction == MessageDirection.Inbound ? "in" : "out") @(m.Status == MessageStatus.Draft ? "draft" : "")">
+                <div class="meta">
+                    @Local(m.CreatedUtc)
+                    @if (m.Intent is not null) { <span class="badge">@m.Intent</span> }
+                    @if (m.Status == MessageStatus.Draft) { <span class="badge warn">draft — approve it in Conversations</span> }
+                </div>
+                <div class="text">@m.Text</div>
+                @if (Ui.MediaUrl(m.AudioUrl) is { } audio)
+                {
+                    <audio controls autoplay="@(m.Id == _autoplayId)" src="@audio"></audio>
+                }
+            </div>
+        }
+        @if (_waiting) { <div class="bubble out typing">…</div> }
+        <form class="composer" @onsubmit="Send">
+            <input placeholder="Type as the customer…" @bind="_text" @bind:event="oninput" autofocus />
+            <button class="btn primary" type="submit" disabled="@string.IsNullOrWhiteSpace(_text)">Send</button>
+        </form>
+    </section>
+
+    <aside>
+        <section class="card">
+            <h2>Customer</h2>
+            <label>Display name<input @bind="_name" /></label>
+            <p class="small muted">Sender id: @_senderId</p>
+            @if (_conversationId is { } id) { <a href="conversations/@id">Open in Conversations →</a> }
+        </section>
+    </aside>
+</div>
+
+@code {
+    private string _senderId = NewId();
+    private string _name = "Test Customer";
+    private string? _text;
+    private int? _conversationId;
+    private int _autoplayId;
+    private bool _waiting;
+    private List<Message> _messages = new();
+
+    private static string NewId() => "sim-" + Guid.NewGuid().ToString("N")[..8];
+
+    protected override bool ShouldReload(ActivityEvent evt) => _conversationId is null || evt.ConversationId == _conversationId;
+
+    protected override async Task LoadAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var conversation = await db.Conversations.AsNoTracking()
+            .Where(c => c.Channel == Channels.Simulator && c.Contact.ExternalUserId == _senderId)
+            .Select(c => (int?)c.Id).FirstOrDefaultAsync();
+        _conversationId = conversation;
+        _messages = conversation is null
+            ? new()
+            : await db.Messages.AsNoTracking().Where(m => m.ConversationId == conversation).OrderBy(m => m.CreatedUtc).ThenBy(m => m.Id).ToListAsync();
+
+        var last = _messages.LastOrDefault();
+        if (last is { Direction: MessageDirection.Outbound } or { Status: MessageStatus.Ignored }) _waiting = false;
+        if (last is { Direction: MessageDirection.Outbound, AudioUrl: not null }) _autoplayId = last.Id;
+    }
+
+    private async Task Send()
+    {
+        if (string.IsNullOrWhiteSpace(_text)) return;
+        var text = _text.Trim();
+        _text = null;
+        _waiting = true;
+        await Queue.EnqueueAsync(new InboundMessage(Channels.Simulator, _senderId, _name, text, "simin-" + Guid.NewGuid().ToString("N"), DateTime.UtcNow));
+    }
+
+    private async Task NewCustomer()
+    {
+        _senderId = NewId();
+        _waiting = false;
+        await LoadAsync();
+    }
+}

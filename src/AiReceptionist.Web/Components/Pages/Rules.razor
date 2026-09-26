@@ -1,0 +1,105 @@
+@page "/rules"
+@inherits LiveComponentBase
+
+<PageTitle>Rules · AI Receptionist</PageTitle>
+<div class="page-header">
+    <div>
+        <h1>Rules</h1>
+        <p class="muted">Deterministic rules checked before the AI, lowest priority number first. The first match wins.</p>
+    </div>
+    <div class="actions"><button class="btn primary" @onclick="Add">+ Add rule</button></div>
+</div>
+@if (_message is not null) { <div class="notice @(_isError ? "danger" : "")">@_message</div> }
+
+<section class="card">
+    <table class="table rules">
+        <thead><tr><th>On</th><th>Priority</th><th>Name</th><th>Match</th><th>Pattern</th><th>Channel</th><th>Action</th><th>Value (intent name / reply text)</th><th></th></tr></thead>
+        <tbody>
+        @foreach (var r in _items)
+        {
+            <tr>
+                <td><input type="checkbox" @bind="r.Enabled" /></td>
+                <td><input type="number" class="narrow" @bind="r.Priority" /></td>
+                <td><input @bind="r.Name" /></td>
+                <td>
+                    <select @bind="r.MatchType">
+                        @foreach (var m in Enum.GetValues<RuleMatchType>()) { <option value="@m">@m</option> }
+                    </select>
+                </td>
+                <td><input @bind="r.Pattern" /></td>
+                <td>
+                    <select @bind="r.ChannelFilter">
+                        <option value="">All</option>
+                        @foreach (var c in new[] { Channels.Facebook, Channels.Instagram, Channels.WhatsApp, Channels.Twitter, Channels.Simulator }) { <option value="@c">@c</option> }
+                    </select>
+                </td>
+                <td>
+                    <select @bind="r.Action">
+                        @foreach (var a in Enum.GetValues<RuleAction>()) { <option value="@a">@a</option> }
+                    </select>
+                </td>
+                <td><input @bind="r.Value" /></td>
+                <td class="nowrap">
+                    <button class="btn small primary" @onclick="@(() => Save(r))">Save</button>
+                    <button class="btn small danger" @onclick="@(() => Delete(r))">✕</button>
+                </td>
+            </tr>
+        }
+        </tbody>
+    </table>
+</section>
+
+<section class="card">
+    <h2>Test a message</h2>
+    <div class="row">
+        <input placeholder="Type a customer message…" @bind="_test" @bind:event="oninput" />
+    </div>
+    @if (!string.IsNullOrWhiteSpace(_test))
+    {
+        var hit = RuleEvaluator.Match(_items, _test, _testChannel);
+        <p>@(hit is null ? "No rule matches — the AI will handle it." : $"Matches '{hit.Name}' → {hit.Action} {hit.Value}")</p>
+    }
+</section>
+
+@code {
+    private List<ConversationRule> _items = new();
+    private string? _message, _test;
+    private string _testChannel = Channels.Simulator;
+    private bool _isError;
+
+    protected override bool ShouldReload(ActivityEvent evt) => false;
+
+    protected override async Task LoadAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _items = await db.Rules.AsNoTracking().OrderBy(r => r.Priority).ThenBy(r => r.Id).ToListAsync();
+    }
+
+    private void Add() => _items.Add(new ConversationRule { Name = "New rule", Priority = (_items.Count + 1) * 10, Pattern = "", Action = RuleAction.FixedReply });
+
+    private async Task Save(ConversationRule rule)
+    {
+        if (RuleEvaluator.Validate(rule) is { } error) { _message = error; _isError = true; return; }
+        if (rule.Action == RuleAction.ForceIntent)
+        {
+            await using var check = await DbFactory.CreateDbContextAsync();
+            if (!await check.Intents.AnyAsync(i => i.Name == rule.Value)) { _message = $"No intent named '{rule.Value}'."; _isError = true; return; }
+        }
+        await using var db = await DbFactory.CreateDbContextAsync();
+        if (string.IsNullOrWhiteSpace(rule.ChannelFilter)) rule.ChannelFilter = null;
+        if (rule.Id == 0) db.Rules.Add(rule); else db.Rules.Update(rule);
+        await db.SaveChangesAsync();
+        _message = $"Saved '{rule.Name}'.";
+        _isError = false;
+    }
+
+    private async Task Delete(ConversationRule rule)
+    {
+        if (rule.Id != 0)
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            await db.Rules.Where(r => r.Id == rule.Id).ExecuteDeleteAsync();
+        }
+        _items.Remove(rule);
+    }
+}

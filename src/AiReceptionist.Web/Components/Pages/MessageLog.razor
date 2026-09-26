@@ -1,0 +1,60 @@
+@page "/log"
+@inherits LiveComponentBase
+
+<PageTitle>Message log · AI Receptionist</PageTitle>
+<h1>Message log</h1>
+
+<div class="toolbar">
+    <select @bind="_channel" @bind:after="LoadAsync">
+        <option value="">All channels</option>
+        @foreach (var c in new[] { Channels.Facebook, Channels.Instagram, Channels.WhatsApp, Channels.Twitter, Channels.Simulator })
+        {
+            <option value="@c">@c</option>
+        }
+    </select>
+    <select @bind="_status" @bind:after="LoadAsync">
+        <option value="">Any status</option>
+        @foreach (var s in Enum.GetValues<MessageStatus>()) { <option value="@s">@s</option> }
+    </select>
+    <input placeholder="Search text…" @bind="_search" @bind:event="oninput" @bind:after="LoadAsync" />
+</div>
+
+<section class="card">
+    <table class="table">
+        <thead><tr><th>Time</th><th>Channel</th><th>Contact</th><th>Dir</th><th>Text</th><th>Intent</th><th>Mode</th><th>Status</th></tr></thead>
+        <tbody>
+        @foreach (var m in _items)
+        {
+            <tr>
+                <td class="nowrap">@Local(m.CreatedUtc)</td>
+                <td>@Ui.ChannelIcon(m.Channel) @m.Channel</td>
+                <td><a href="conversations/@m.ConversationId">@(m.Conversation.Contact.DisplayName ?? m.Conversation.Contact.ExternalUserId)</a></td>
+                <td>@(m.Direction == MessageDirection.Inbound ? "in" : "out")</td>
+                <td>
+                    @Ui.Truncate(m.Text, 140)
+                    @if (Ui.MediaUrl(m.AudioUrl) is { } a) { <audio controls preload="none" src="@a" class="mini"></audio> }
+                    @if (m.Error is not null) { <div class="small error">@m.Error</div> }
+                </td>
+                <td>@m.Intent @(m.Confidence is { } c ? $"({c:P0})" : "")</td>
+                <td>@m.ReplyMode</td>
+                <td><span class="@Ui.StatusClass(m.Status)">@m.Status</span></td>
+            </tr>
+        }
+        </tbody>
+    </table>
+</section>
+
+@code {
+    private string _channel = "", _status = "", _search = "";
+    private List<Message> _items = new();
+
+    protected override async Task LoadAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var q = db.Messages.AsNoTracking().Include(m => m.Conversation).ThenInclude(c => c.Contact).AsQueryable();
+        if (!string.IsNullOrEmpty(_channel)) q = q.Where(m => m.Channel == _channel);
+        if (Enum.TryParse<MessageStatus>(_status, out var status)) q = q.Where(m => m.Status == status);
+        if (!string.IsNullOrWhiteSpace(_search)) q = q.Where(m => m.Text != null && EF.Functions.Like(m.Text, $"%{_search.Trim()}%"));
+        _items = await q.OrderByDescending(m => m.CreatedUtc).ThenByDescending(m => m.Id).Take(300).ToListAsync();
+    }
+}

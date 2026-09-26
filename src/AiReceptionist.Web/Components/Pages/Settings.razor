@@ -1,0 +1,145 @@
+@page "/settings"
+@inherits LiveComponentBase
+@inject IVoiceSynthesizer Voice
+@inject IMediaStore Media
+@inject IEmailSender Email
+@inject AvailabilityService Availability
+
+<PageTitle>Settings · AI Receptionist</PageTitle>
+<h1>Settings</h1>
+@if (_message is not null) { <div class="notice @(_isError ? "danger" : "")">@_message</div> }
+
+@if (_s is not null)
+{
+    <section class="card">
+        <h2>Business</h2>
+        <div class="form-grid-2">
+            <label>Business name<input @bind="_s.BusinessName" /></label>
+            <label>Time zone <span class="small muted">(IANA e.g. Europe/London, or Windows e.g. GMT Standard Time)</span><input @bind="_s.TimeZoneId" /></label>
+        </div>
+        <label>Description, services, address, policies (the AI only answers from this)<textarea rows="4" @bind="_s.BusinessDescription"></textarea></label>
+        <label>Receptionist persona / system prompt<textarea rows="3" @bind="_s.SystemPrompt"></textarea></label>
+    </section>
+
+    <section class="card">
+        <h2>Appointments</h2>
+        <div class="form-grid">
+            <label>Opening hours<input @bind="_s.BusinessHours" placeholder="Mon-Fri 09:00-17:00; Sat 10:00-13:00" /></label>
+            <label>Length (minutes)<input type="number" min="5" @bind="_s.AppointmentMinutes" /></label>
+            <label>Book up to (days ahead)<input type="number" min="1" @bind="_s.BookingHorizonDays" /></label>
+            <label>Minimum notice (minutes)<input type="number" min="0" @bind="_s.MinLeadMinutes" /></label>
+        </div>
+        <label>Calendar event subject <span class="small muted">{fullname} {name} {channel} {business}</span><input @bind="_s.AppointmentSubject" /></label>
+        <div class="form-grid-2">
+            <label>Reply after calendar booking <span class="small muted">{name} {slot}</span><textarea rows="2" @bind="_s.BookedReply"></textarea></label>
+            <label>Reply after email fallback<textarea rows="2" @bind="_s.EmailFallbackReply"></textarea></label>
+            <label>Reply if booking failed<textarea rows="2" @bind="_s.BookingFailedReply"></textarea></label>
+            <label>Reply if requested slot is taken <span class="small muted">{slots}</span><textarea rows="2" @bind="_s.SlotUnavailableReply"></textarea></label>
+        </div>
+        <button class="btn" @onclick="CheckCalendar">Check availability now</button>
+        @if (_slots is not null) { <p class="small">@_slots</p> }
+    </section>
+
+    <section class="card">
+        <h2>Behaviour</h2>
+        <div class="form-grid">
+            <label class="check"><input type="checkbox" @bind="_s.AutoReplyEnabled" /> Auto-reply enabled</label>
+            <label class="check"><input type="checkbox" @bind="_s.RequireApproval" /> Require approval (replies saved as drafts)</label>
+            <label class="check"><input type="checkbox" @bind="_s.VoiceReplyToVoice" /> Answer voice notes with voice</label>
+            <label>Default reply mode
+                <select @bind="_s.DefaultReplyMode">
+                    @foreach (var m in Enum.GetValues<ReplyMode>()) { <option value="@m">@m</option> }
+                </select>
+            </label>
+            <label>Min. AI confidence (0-1)<input type="number" step="0.05" min="0" max="1" @bind="_s.MinConfidence" /></label>
+            <label>History sent to AI (messages)<input type="number" min="0" max="50" @bind="_s.HistoryMessages" /></label>
+        </div>
+        <label>Handoff / fallback message<textarea rows="2" @bind="_s.HandoffMessage"></textarea></label>
+    </section>
+
+    <section class="card">
+        <h2>Voice</h2>
+        <div class="row">
+            <label class="grow">Azure neural voice <span class="small muted">e.g. en-US-AvaMultilingualNeural, en-GB-SoniaNeural, en-IN-NeerjaNeural</span><input @bind="_s.VoiceName" /></label>
+        </div>
+        <div class="row">
+            <input class="grow" @bind="_voiceSample" />
+            <button class="btn" @onclick="TestVoice" disabled="@(!Voice.IsConfigured)">▶ Test voice</button>
+        </div>
+        @if (!Voice.IsConfigured) { <p class="small muted">Configure Speech:Key and Speech:Region to enable voice replies.</p> }
+        @if (_voiceUrl is not null) { <audio controls autoplay src="@_voiceUrl"></audio> }
+    </section>
+
+    <section class="card">
+        <h2>Email fallback</h2>
+        <p class="small muted">Used when the Microsoft 365 calendar is unavailable. Owner: @(Email.OwnerAddress ?? "not configured")</p>
+        <button class="btn" @onclick="TestEmail" disabled="@(!Email.IsConfigured)">Send test email</button>
+    </section>
+
+    <div class="sticky-save">
+        <button class="btn primary" @onclick="Save">Save settings</button>
+    </div>
+}
+
+@code {
+    private BotSettings? _s;
+    private string? _message, _slots, _voiceUrl;
+    private string _voiceSample = "Hi! Thanks for getting in touch. Your appointment is confirmed.";
+    private bool _isError;
+
+    protected override bool ShouldReload(ActivityEvent evt) => false;
+
+    protected override async Task LoadAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _s = await db.Settings.AsNoTracking().OrderBy(s => s.Id).FirstAsync();
+    }
+
+    private async Task Save()
+    {
+        if (!BusinessHours.TryParse(_s!.BusinessHours, out _, out var hoursError)) { Show("Opening hours: " + hoursError, true); return; }
+        if (!TimeZoneResolver.IsKnown(_s.TimeZoneId)) { Show($"Unknown time zone '{_s.TimeZoneId}'.", true); return; }
+        if (_s.AppointmentMinutes < 5 || _s.BookingHorizonDays < 1) { Show("Appointment length must be ≥ 5 minutes and horizon ≥ 1 day.", true); return; }
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+        db.Settings.Update(_s);
+        await db.SaveChangesAsync();
+        Show("Settings saved. They apply to the next message.", false);
+    }
+
+    private async Task CheckCalendar()
+    {
+        try
+        {
+            var a = await Availability.GetAsync(_s!, CancellationToken.None);
+            var tz = a.TimeZone;
+            _slots = (a.CalendarChecked ? "Microsoft 365 calendar read OK. " : "Calendar not read (not configured or unavailable) — using opening hours only. ") +
+                     $"{a.OpenSlots.Count} open slots. Next: " +
+                     string.Join(", ", a.OpenSlots.Take(5).Select(s => SlotFormatter.Friendly(s.StartUtc, tz)));
+        }
+        catch (Exception ex) { _slots = "Error: " + ex.Message; }
+    }
+
+    private async Task TestVoice()
+    {
+        try
+        {
+            var clip = await Voice.SynthesizeAsync(_voiceSample, _s!.VoiceName, AudioFormat.Mp3, CancellationToken.None);
+            _voiceUrl = Ui.MediaUrl(await Media.SaveAsync(clip, CancellationToken.None));
+        }
+        catch (Exception ex) { Show("Voice test failed: " + ex.Message, true); }
+    }
+
+    private async Task TestEmail()
+    {
+        try
+        {
+            await Email.SendAsync(new EmailMessage(new[] { Email.OwnerAddress! }, "AI Receptionist test email",
+                "Email fallback is working."), CancellationToken.None);
+            Show($"Test email sent to {Email.OwnerAddress}.", false);
+        }
+        catch (Exception ex) { Show("Email test failed: " + ex.Message, true); }
+    }
+
+    private void Show(string message, bool isError) { _message = message; _isError = isError; }
+}

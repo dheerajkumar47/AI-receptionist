@@ -1,0 +1,193 @@
+@page "/conversations/{Id:int}"
+@inherits LiveComponentBase
+@inject ConversationService Service
+
+<PageTitle>Conversation · AI Receptionist</PageTitle>
+
+@if (_conversation is null)
+{
+    <p class="muted">Loading…</p>
+}
+else
+{
+    var contact = _conversation.Contact;
+    <div class="page-header">
+        <div>
+            <h1>@Ui.ChannelIcon(_conversation.Channel) @(contact.DisplayName ?? "Unknown contact")</h1>
+            <div class="muted small">@_conversation.Channel · id @contact.ExternalUserId @(contact.Phone is not null ? $"· {contact.Phone}" : "")</div>
+        </div>
+        <div class="actions">
+            @if (_conversation.NeedsAttention)
+            {
+                <button class="btn" @onclick="ClearAttention">Mark handled</button>
+            }
+            @if (_conversation.Mode == ConversationMode.Bot)
+            {
+                <button class="btn warn" @onclick="@(() => SetMode(ConversationMode.HumanTakeover))">⏸ Take over (pause bot)</button>
+            }
+            else
+            {
+                <button class="btn primary" @onclick="@(() => SetMode(ConversationMode.Bot))">▶ Resume bot</button>
+            }
+        </div>
+    </div>
+
+    @if (_conversation.Mode == ConversationMode.HumanTakeover)
+    {
+        <div class="notice warn">The bot is paused for this conversation. Replies below are sent only when you press Send.</div>
+    }
+    @if (_conversation.PendingSlotStartUtc is { } pending)
+    {
+        <div class="notice">Awaiting confirmation of slot <strong>@Local(pending)</strong>.</div>
+    }
+    @if (_error is not null) { <div class="notice danger">@_error</div> }
+
+    <div class="grid-main">
+        <section class="card thread">
+            @foreach (var m in _messages)
+            {
+                <div class="bubble @(m.Direction == MessageDirection.Inbound ? "in" : "out") @(m.Status == MessageStatus.Draft ? "draft" : "")">
+                    <div class="meta">
+                        @Local(m.CreatedUtc)
+                        @if (m.Intent is not null) { <span class="badge">@m.Intent @(m.Confidence is { } c ? $"{c:P0}" : "")</span> }
+                        @if (m.IsManual) { <span class="badge warn">manual</span> }
+                        @if (m.IsVoice) { <span class="badge">voice note</span> }
+                        @if (m.Direction == MessageDirection.Outbound) { <span class="@Ui.StatusClass(m.Status)">@m.Status</span> }
+                        @if (m.Status == MessageStatus.Ignored) { <span class="badge muted">not answered</span> }
+                    </div>
+
+                    @if (m.Status == MessageStatus.Draft)
+                    {
+                        <textarea rows="3" @bind="_draftEdits[m.Id]"></textarea>
+                        <div class="row">
+                            <select @bind="_draftModes[m.Id]">
+                                @foreach (var mode in Enum.GetValues<ReplyMode>()) { <option value="@mode">@mode</option> }
+                            </select>
+                            <button class="btn primary" @onclick="@(() => Approve(m.Id))" disabled="@_busy">Approve &amp; send</button>
+                            <button class="btn" @onclick="@(() => Discard(m.Id))" disabled="@_busy">Discard</button>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="text">@(m.Text ?? (m.IsVoice ? "(voice note could not be transcribed)" : "(attachment)"))</div>
+                    }
+
+                    @if (Ui.MediaUrl(m.AudioUrl) is { } audio)
+                    {
+                        <audio controls preload="none" src="@audio"></audio>
+                    }
+                    @if (m.Error is not null) { <div class="small error">@m.Error</div> }
+                </div>
+            }
+        </section>
+
+        <aside>
+            <section class="card">
+                <h2>Send a reply</h2>
+                <textarea rows="4" placeholder="Type a manual reply…" @bind="_reply" @bind:event="oninput"></textarea>
+                <div class="row">
+                    <select @bind="_replyMode">
+                        @foreach (var mode in Enum.GetValues<ReplyMode>()) { <option value="@mode">@mode</option> }
+                    </select>
+                    <button class="btn primary" @onclick="SendReply" disabled="@(_busy || string.IsNullOrWhiteSpace(_reply))">Send</button>
+                </div>
+                <p class="small muted">Manual replies are sent immediately on @_conversation.Channel. Voice uses the configured Azure neural voice.</p>
+            </section>
+
+            <section class="card">
+                <h2>Contact</h2>
+                <label>Name<input @bind="_name" /></label>
+                <label>Email<input type="email" @bind="_email" /></label>
+                <button class="btn" @onclick="SaveContact">Save contact</button>
+            </section>
+
+            <section class="card">
+                <h2>Appointments</h2>
+                @if (_appointments.Count == 0) { <p class="muted small">None yet.</p> }
+                @foreach (var a in _appointments)
+                {
+                    <div class="appt">
+                        <strong>@Local(a.StartUtc)</strong> <span class="@Ui.AppointmentClass(a.Status)">@a.Status</span>
+                        @if (a.WebLink is not null) { <a href="@a.WebLink" target="_blank" class="small">open in Outlook</a> }
+                        @if (a.Error is not null) { <div class="small error">@a.Error</div> }
+                    </div>
+                }
+            </section>
+        </aside>
+    </div>
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private Conversation? _conversation;
+    private List<Message> _messages = new();
+    private List<Appointment> _appointments = new();
+    private readonly Dictionary<int, string?> _draftEdits = new();
+    private readonly Dictionary<int, ReplyMode> _draftModes = new();
+    private string? _reply, _name, _email, _error;
+    private ReplyMode _replyMode = ReplyMode.Text;
+    private bool _busy;
+
+    protected override bool ShouldReload(ActivityEvent evt) => evt.ConversationId == Id;
+
+    protected override async Task LoadAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _conversation = await db.Conversations.AsNoTracking().Include(c => c.Contact).FirstOrDefaultAsync(c => c.Id == Id);
+        if (_conversation is null) return;
+
+        _messages = await db.Messages.AsNoTracking().Where(m => m.ConversationId == Id).OrderBy(m => m.CreatedUtc).ThenBy(m => m.Id).ToListAsync();
+        _appointments = await db.Appointments.AsNoTracking().Where(a => a.ConversationId == Id).OrderByDescending(a => a.StartUtc).ToListAsync();
+        foreach (var d in _messages.Where(m => m.Status == MessageStatus.Draft))
+        {
+            _draftEdits.TryAdd(d.Id, d.Text);
+            _draftModes.TryAdd(d.Id, d.ReplyMode ?? ReplyMode.Text);
+        }
+        _name ??= _conversation.Contact.DisplayName;
+        _email ??= _conversation.Contact.Email;
+    }
+
+    private async Task Run(Func<Task> action)
+    {
+        _busy = true;
+        _error = null;
+        try { await action(); }
+        catch (Exception ex) { _error = ex.Message; }
+        finally { _busy = false; }
+        await LoadAsync();
+    }
+
+    private Task SendReply() => Run(async () =>
+    {
+        var sent = await Service.SendManualReplyAsync(Id, _reply!.Trim(), _replyMode);
+        if (sent.Status == MessageStatus.Failed) _error = sent.Error;
+        else _reply = null;
+    });
+
+    private Task Approve(int messageId) => Run(async () =>
+    {
+        var sent = await Service.ApproveDraftAsync(messageId, _draftEdits.GetValueOrDefault(messageId), _draftModes.GetValueOrDefault(messageId));
+        if (sent.Status == MessageStatus.Failed) _error = sent.Error;
+    });
+
+    private Task Discard(int messageId) => Run(() => Service.DiscardDraftAsync(messageId));
+
+    private Task SetMode(ConversationMode mode) => Run(() => Service.SetModeAsync(Id, mode));
+
+    private Task ClearAttention() => Run(async () =>
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        await db.Conversations.Where(c => c.Id == Id).ExecuteUpdateAsync(s => s.SetProperty(c => c.NeedsAttention, false));
+        Notifier.Publish(new ActivityEvent(ActivityKind.ConversationUpdated, Id));
+    });
+
+    private Task SaveContact() => Run(async () =>
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var contact = await db.Contacts.SingleAsync(c => c.Id == _conversation!.ContactId);
+        contact.DisplayName = string.IsNullOrWhiteSpace(_name) ? null : _name.Trim();
+        contact.Email = string.IsNullOrWhiteSpace(_email) ? null : _email.Trim();
+        await db.SaveChangesAsync();
+    });
+}

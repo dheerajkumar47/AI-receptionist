@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <RootNamespace>AiReceptionist.Web</RootNamespace>
+    <UserSecretsId>ai-receptionist-3f6c2b1e</UserSecretsId>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\AiReceptionist.Infrastructure\AiReceptionist.Infrastructure.csproj" />
+  </ItemGroup>
+</Project>

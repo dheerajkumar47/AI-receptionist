@@ -1,0 +1,90 @@
+@page "/intents"
+@inherits LiveComponentBase
+
+<PageTitle>Intents · AI Receptionist</PageTitle>
+<div class="page-header">
+    <div>
+        <h1>Intents</h1>
+        <p class="muted">What customers may want, and what the receptionist does about it. Changes apply to the next message — no restart needed.</p>
+    </div>
+    <div class="actions"><button class="btn primary" @onclick="Add">+ Add intent</button></div>
+</div>
+@if (_message is not null) { <div class="notice @(_isError ? "danger" : "")">@_message</div> }
+
+@foreach (var i in _items)
+{
+    <section class="card intent @(i.Enabled ? "" : "disabled")">
+        <div class="form-grid">
+            <label>Name<input @bind="i.Name" /></label>
+            <label>Action
+                <select @bind="i.Action">
+                    @foreach (var a in Enum.GetValues<IntentAction>()) { <option value="@a">@a</option> }
+                </select>
+            </label>
+            <label>Reply as
+                <select @bind="i.ReplyMode">
+                    @foreach (var m in Enum.GetValues<ReplyMode>()) { <option value="@m">@m</option> }
+                </select>
+            </label>
+            <label>Order<input type="number" @bind="i.SortOrder" /></label>
+        </div>
+        <label>Description (tells the AI when this intent applies)<input @bind="i.Description" /></label>
+        <div class="form-grid-2">
+            <label>Example phrases (one per line)<textarea rows="4" @bind="i.Examples"></textarea></label>
+            <label>Reply guidance for the AI<textarea rows="4" @bind="i.Guidance"></textarea></label>
+        </div>
+        <label>Template reply <span class="muted small">— placeholders {name} {business} {slot} {slots} {hours}; used offline, as a fallback, or always if ticked below</span>
+            <textarea rows="2" @bind="i.TemplateReply"></textarea>
+        </label>
+        <div class="row">
+            <label class="check"><input type="checkbox" @bind="i.AlwaysUseTemplate" /> Always use the template (skip AI wording)</label>
+            <label class="check"><input type="checkbox" @bind="i.Enabled" /> Enabled</label>
+            <div class="spacer"></div>
+            <button class="btn danger" @onclick="@(() => Delete(i))">Delete</button>
+            <button class="btn primary" @onclick="@(() => Save(i))">Save</button>
+        </div>
+    </section>
+}
+
+@code {
+    private List<IntentDefinition> _items = new();
+    private string? _message;
+    private bool _isError;
+
+    protected override bool ShouldReload(ActivityEvent evt) => false;
+
+    protected override async Task LoadAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _items = await db.Intents.AsNoTracking().OrderBy(i => i.SortOrder).ThenBy(i => i.Name).ToListAsync();
+    }
+
+    private void Add() => _items.Insert(0, new IntentDefinition { Name = "NewIntent", SortOrder = 50, Description = "Describe when this applies." });
+
+    private async Task Save(IntentDefinition intent)
+    {
+        if (string.IsNullOrWhiteSpace(intent.Name)) { Show("Name is required.", true); return; }
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            intent.Name = intent.Name.Trim();
+            if (intent.Id == 0) db.Intents.Add(intent); else db.Intents.Update(intent);
+            await db.SaveChangesAsync();
+            Show($"Saved '{intent.Name}'.", false);
+        }
+        catch (DbUpdateException) { Show($"An intent named '{intent.Name}' already exists.", true); }
+    }
+
+    private async Task Delete(IntentDefinition intent)
+    {
+        if (intent.Id != 0)
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            await db.Intents.Where(i => i.Id == intent.Id).ExecuteDeleteAsync();
+        }
+        _items.Remove(intent);
+        Show($"Deleted '{intent.Name}'.", false);
+    }
+
+    private void Show(string message, bool isError) { _message = message; _isError = isError; }
+}
