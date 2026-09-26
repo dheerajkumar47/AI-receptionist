@@ -7,8 +7,22 @@
         <h1>Intents</h1>
         <p class="muted">What customers may want, and what the receptionist does about it. Changes apply to the next message — no restart needed.</p>
     </div>
-    <div class="actions"><button class="btn primary" @onclick="Add">+ Add intent</button></div>
+    <div class="actions">
+        <button class="btn" @onclick="@(() => _confirmRestore = true)">Restore recommended intents</button>
+        <button class="btn primary" @onclick="Add">+ Add intent</button>
+    </div>
 </div>
+@if (_confirmRestore)
+{
+    <div class="notice warn">
+        This replaces <strong>all</strong> current intents with the recommended set for a software services business
+        (Greeting, BusinessInfo, PricingQuote, BookAppointment, ConfirmAppointment, CancelAppointment, HumanAgent, Other).
+        <div class="row">
+            <button class="btn danger" @onclick="Restore">Yes, replace my intents</button>
+            <button class="btn" @onclick="@(() => _confirmRestore = false)">Cancel</button>
+        </div>
+    </div>
+}
 @if (_message is not null) { <div class="notice @(_isError ? "danger" : "")">@_message</div> }
 
 @foreach (var i in _items)
@@ -57,6 +71,19 @@
     {
         await using var db = await DbFactory.CreateDbContextAsync();
         _items = await db.Intents.AsNoTracking().OrderBy(i => i.SortOrder).ThenBy(i => i.Name).ToListAsync();
+    }
+
+    private bool _confirmRestore;
+
+    private async Task Restore()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        await db.Intents.ExecuteDeleteAsync();
+        db.Intents.AddRange(SeedData.DefaultIntents());
+        await db.SaveChangesAsync();
+        _confirmRestore = false;
+        await LoadAsync();
+        Show("Recommended intents restored. They apply to the next message.", false);
     }
 
     private void Add() => _items.Insert(0, new IntentDefinition { Name = "NewIntent", SortOrder = 50, Description = "Describe when this applies." });

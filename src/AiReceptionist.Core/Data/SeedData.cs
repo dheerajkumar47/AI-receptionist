@@ -54,50 +54,60 @@ public static class SeedData
         await db.SaveChangesAsync(ct);
     }
 
+    /// <summary>Recommended intents for a software / IT services business offering free consultation calls.
+    /// Also used by the dashboard's "Restore recommended intents" button.</summary>
     public static IEnumerable<IntentDefinition> DefaultIntents() => new[]
     {
         new IntentDefinition
         {
             Name = "Greeting", SortOrder = 1, Action = IntentAction.Reply, ReplyMode = ReplyMode.TextAndVoice,
-            Description = "The customer says hello or starts the conversation without a specific request.",
-            Examples = "hi\nhello\nhey there\ngood morning",
-            Guidance = "Greet them, introduce yourself as the receptionist for the business and ask how you can help.",
-            TemplateReply = "Hi {name}! Thanks for contacting {business}. How can I help you today? I can answer questions or book an appointment.",
+            Description = "The person says hello or starts a conversation without a specific request.",
+            Examples = "hi\nhello\nassalam o alaikum\nsalam\nhey there\ngood morning",
+            Guidance = "Greet them warmly, introduce yourself as the virtual assistant of the business, mention that we build websites, mobile apps and AI solutions, and ask how you can help.",
+            TemplateReply = "Hi {name}! Welcome to {business}. We build websites, mobile apps and AI solutions. How can I help you today?",
         },
         new IntentDefinition
         {
             Name = "BusinessInfo", SortOrder = 2, Action = IntentAction.Reply, ReplyMode = ReplyMode.Text,
-            Description = "Questions about opening hours, location, services or pricing.",
-            Examples = "what are your opening hours\nwhere are you located\nwhat services do you offer\nare you open on saturday",
-            Guidance = "Answer only from the business description and opening hours. If unknown, say a team member will follow up.",
-            TemplateReply = "We're open {hours}. Would you like to book an appointment?",
+            Description = "Questions about our services, technologies, portfolio, working hours, location or how we work.",
+            Examples = "what services do you offer\ndo you make mobile apps\ncan you build an ecommerce store\nwhat technologies do you use\nshow me your portfolio\ndo you work with international clients\nwhat are your opening hours\nwhat are your working hours\nwhere are you located",
+            Guidance = "Answer only from the business description. Keep it short and friendly, then invite them to a free 30-minute consultation call to discuss their project.",
+            TemplateReply = "We build custom websites, mobile apps, web apps, AI chatbots and business automation. Our working hours are {hours}. Would you like to book a free 30-minute consultation call?",
         },
         new IntentDefinition
         {
-            Name = "BookAppointment", SortOrder = 3, Action = IntentAction.ProposeAppointment, ReplyMode = ReplyMode.Text,
-            Description = "The customer wants to book, schedule or reschedule an appointment, or asks about availability.",
-            Examples = "can I book an appointment\nI'd like to schedule a visit\ndo you have anything tomorrow afternoon\nbook me in for friday\navailability next week",
-            Guidance = "Offer one specific open slot that best matches their request (or 2-3 if they gave no preference) and ask them to confirm. Ask for their name if unknown.",
-            TemplateReply = "I can offer {slot}. Shall I book that for you?",
+            Name = "PricingQuote", SortOrder = 3, Action = IntentAction.Reply, ReplyMode = ReplyMode.Text,
+            Description = "The person asks about price, cost, budget, rates or how long a project takes.",
+            Examples = "how much does a website cost\nwhat is your price\nhow much for a mobile app\nwhat are your rates\nwhat is the budget for an ecommerce site\nhow long will it take",
+            Guidance = "Never give a price or a deadline. Explain that every project is different and we share an exact quote after a free 30-minute consultation call, then offer a call time.",
+            TemplateReply = "Every project is different, so we share an exact quote after a free 30-minute consultation call. I can offer {slot}. Shall I book it for you?",
         },
         new IntentDefinition
         {
-            Name = "ConfirmAppointment", SortOrder = 4, Action = IntentAction.ConfirmAppointment, ReplyMode = ReplyMode.TextAndVoice,
-            Description = "The customer accepts the slot that was just offered (yes, that works, book it...).",
-            Examples = "yes\nyes please\nthat works\nperfect, book it\nsounds good",
-            Guidance = "Only use when a pending slot exists (or you are proposing one in the same reply) and the customer clearly accepts it.",
+            Name = "BookAppointment", SortOrder = 4, Action = IntentAction.ProposeAppointment, ReplyMode = ReplyMode.Text,
+            Description = "The person wants to book, schedule or reschedule a consultation call or meeting, or asks when we are available.",
+            Examples = "can I book an appointment\ncan we have a call\nI want to discuss my project\nschedule a meeting\nI'd like to schedule a visit\nbook a free consultation\nare you available tomorrow\nbook me in for friday\navailability next week\nI want to reschedule my call",
+            Guidance = "Offer one specific free consultation slot that best matches their request (or 2-3 options if they have no preference) and ask them to confirm. Ask for their name and email if unknown, so we can send the meeting link.",
+            TemplateReply = "I can offer a free consultation call on {slot}. Shall I book it for you?",
         },
         new IntentDefinition
         {
-            Name = "CancelAppointment", SortOrder = 5, Action = IntentAction.CancelAppointment, ReplyMode = ReplyMode.TextAndVoice,
-            Description = "The customer wants to cancel an existing appointment.",
-            Examples = "cancel my appointment\nI can't make it\nplease cancel",
+            Name = "ConfirmAppointment", SortOrder = 5, Action = IntentAction.ConfirmAppointment, ReplyMode = ReplyMode.TextAndVoice,
+            Description = "The person accepts the consultation slot that was just offered.",
+            Examples = "yes\nyes please\nthat works\nperfect, book it\nok done\nsounds good",
+            Guidance = "Only use when a slot was just offered (or you are offering one in the same reply) and the person clearly accepts it.",
         },
         new IntentDefinition
         {
-            Name = "HumanAgent", SortOrder = 6, Action = IntentAction.HumanHandoff, ReplyMode = ReplyMode.Text,
-            Description = "The customer asks for a person, complains, or has a problem the bot cannot solve.",
-            Examples = "can I speak to a human\nthis is unacceptable\nI want to make a complaint\nreal person please",
+            Name = "CancelAppointment", SortOrder = 6, Action = IntentAction.CancelAppointment, ReplyMode = ReplyMode.TextAndVoice,
+            Description = "The person wants to cancel their booked consultation call.",
+            Examples = "cancel my call\ncancel my appointment\nI can't make it\nplease cancel the meeting",
+        },
+        new IntentDefinition
+        {
+            Name = "HumanAgent", SortOrder = 7, Action = IntentAction.HumanHandoff, ReplyMode = ReplyMode.Text,
+            Description = "The person asks for a real person, has a complaint, an issue with an existing project, or a request the assistant cannot handle.",
+            Examples = "can I speak to a human\ncan I talk to a real person\nI have a problem with my project\nthis is not working\nI want to make a complaint",
             TemplateReply = "I've passed your message to our team and someone will reply to you personally very soon.",
         },
         new IntentDefinition
@@ -105,8 +115,8 @@ public static class SeedData
             Name = "Other", SortOrder = 99, Action = IntentAction.Reply, ReplyMode = ReplyMode.Text,
             Description = "Anything else.",
             Examples = "",
-            Guidance = "Reply helpfully and briefly. Offer to book an appointment if relevant.",
-            TemplateReply = "Thanks for your message! I can share our opening hours or book an appointment for you. What would you like to do?",
+            Guidance = "Reply helpfully and briefly. If it relates to software, offer a free consultation call.",
+            TemplateReply = "Thanks for your message! I can tell you about our services or book a free consultation call. What would you like to do?",
         },
     };
 }
