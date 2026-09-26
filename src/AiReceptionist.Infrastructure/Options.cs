@@ -77,8 +77,8 @@ public sealed class GraphCalendarOptions
     /// account, one-time device-code sign-in; only ClientId is required).</summary>
     public string SignInMode { get; set; } = "App";
 
-    /// <summary>Personal mode: where the signed-in account is remembered between restarts.</summary>
-    public string AuthRecordPath { get; set; } = "data/graph-auth.json";
+    /// <summary>Personal mode: file holding the saved sign-in (MSAL token cache, DPAPI-encrypted on Windows).</summary>
+    public string TokenCachePath { get; set; } = "data/outlook-token-cache.bin";
 
     public bool IsPersonal => SignInMode.Equals("Personal", StringComparison.OrdinalIgnoreCase);
 

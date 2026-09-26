@@ -364,3 +364,18 @@ public class TwitterTests
         Assert.Equal("abc", next);
     }
 }
+
+public class PersonalCalendarCredentialTests
+{
+    [Fact]
+    public async Task Without_a_saved_sign_in_the_credential_asks_for_sign_in()
+    {
+        var file = Path.Combine(Path.GetTempPath(), $"air-cache-{Guid.NewGuid():N}.bin");
+        var credential = new AiReceptionist.Infrastructure.Calendar.PersonalAccountCredential(
+            "00000000-0000-0000-0000-000000000001", "consumers", file);
+
+        Assert.False(await credential.HasAccountAsync());
+        await Assert.ThrowsAsync<AiReceptionist.Infrastructure.Calendar.CalendarSignInRequiredException>(async () =>
+            await credential.GetTokenAsync(new Azure.Core.TokenRequestContext(new[] { "x" }), default));
+    }
+}

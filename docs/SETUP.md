@@ -135,7 +135,7 @@ There are two sign-in modes. Pick the one that matches your account:
    https://microsoft.com/devicelogin and enter the code XXXXXXXX"*. The same line is also printed in the terminal.
    Open the link, enter the code, sign in with your Microsoft account and click **Accept**.
 7. Within a few seconds the terminal logs *"Outlook calendar connected as ..."* and the Dashboard shows the calendar
-   as **active**. The sign-in is remembered in `data/graph-auth.json` plus the OS-protected token cache, so restarts don't ask again.
+   as **active**. The sign-in is saved in `data/outlook-token-cache.bin` (encrypted for your Windows user), so restarts don't ask again.
 
 ✅ **Settings → Check availability now** says *Microsoft 365 calendar read OK*. Booking in the Simulator creates an
 event in https://outlook.live.com/calendar.
@@ -330,7 +330,7 @@ implement `IWebhookChannel` on `TwitterDmChannel` (see ARCHITECTURE.md).
 | `OpenAI:Endpoint` / `ApiKey` / `Deployment` / `Temperature` | | Language model settings. If no key is set, the offline engine is used. |
 | `Speech:Key` / `Region` / `RecognitionLanguage` | | Azure AI Speech. If unset, replies are text only. |
 | `Media:Directory` | `data/media` | Where generated audio is stored (served at `/media`). |
-| `Microsoft365:SignInMode` / `TenantId` / `ClientId` / `ClientSecret` / `CalendarUser` / `InviteCustomer` / `AuthRecordPath` | `App` | Graph calendar (`Personal` = Outlook.com with device-code sign-in). If unset, bookings use email. |
+| `Microsoft365:SignInMode` / `TenantId` / `ClientId` / `ClientSecret` / `CalendarUser` / `InviteCustomer` / `TokenCachePath` | `App` | Graph calendar (`Personal` = Outlook.com with device-code sign-in). If unset, bookings use email. |
 | `Email:Host` / `Port` / `Security` / `Username` / `Password` / `FromAddress` / `FromName` / `OwnerAddress` / `PickupDirectory` | | Email fallback. |
 | `Meta:AppSecret` / `VerifyToken` / `GraphApiVersion` / `GraphBaseUrl` | `v21.0`, `https://graph.facebook.com` | Shared Meta settings. |
 | `Meta:Facebook:PageAccessToken` | | Messenger. |

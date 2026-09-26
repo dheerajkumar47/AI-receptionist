@@ -1,7 +1,6 @@
 using System.Globalization;
 using AiReceptionist.Core.Abstractions;
 using AiReceptionist.Core.Scheduling;
-using Azure.Core;
 using Azure.Identity;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -22,14 +21,12 @@ namespace AiReceptionist.Infrastructure.Calendar;
 /// </summary>
 public sealed class GraphCalendarProvider : ICalendarProvider
 {
-    private static readonly string[] DelegatedScopes = { "Calendars.ReadWrite" };
     private const string PreferUtc = "outlook.timezone=\"UTC\"";
 
     private readonly GraphCalendarOptions _options;
     private readonly ILogger<GraphCalendarProvider> _log;
     private readonly GraphServiceClient _client;
-    private readonly DeviceCodeCredential? _personalCredential;
-    private readonly string? _recordPath;
+    private readonly PersonalAccountCredential? _personal;
 
     public GraphCalendarProvider(IOptions<GraphCalendarOptions> options, ILogger<GraphCalendarProvider> log)
     {
@@ -45,29 +42,12 @@ public sealed class GraphCalendarProvider : ICalendarProvider
             return;
         }
 
-        _recordPath = Path.GetFullPath(_options.AuthRecordPath);
-        var record = LoadRecord(_recordPath);
-        _personalCredential = new DeviceCodeCredential(new DeviceCodeCredentialOptions
-        {
-            TenantId = string.IsNullOrWhiteSpace(_options.TenantId) ? "consumers" : _options.TenantId,
-            ClientId = _options.ClientId,
-            AuthenticationRecord = record,
-            // Never block a customer message on an interactive prompt; sign-in only happens via SignInAsync.
-            DisableAutomaticAuthentication = true,
-            TokenCachePersistenceOptions = new TokenCachePersistenceOptions
-            {
-                Name = "ai-receptionist-graph",
-                UnsafeAllowUnencryptedStorage = true, // only used where the OS has no protected storage
-            },
-            DeviceCodeCallback = (info, _) =>
-            {
-                SignInPrompt = info.Message;
-                _log.LogWarning("Outlook calendar sign-in required: {Message}", info.Message);
-                return Task.CompletedTask;
-            },
-        });
-        IsSignedIn = record is not null;
-        _client = new GraphServiceClient(_personalCredential, DelegatedScopes);
+        _personal = new PersonalAccountCredential(
+            _options.ClientId!,
+            string.IsNullOrWhiteSpace(_options.TenantId) ? "consumers" : _options.TenantId,
+            _options.TokenCachePath);
+        IsSignedIn = _personal.HasAccountAsync().GetAwaiter().GetResult();
+        _client = new GraphServiceClient(_personal, PersonalAccountCredential.Scopes);
     }
 
     public bool IsConfigured => _options.IsConfigured;
@@ -75,24 +55,26 @@ public sealed class GraphCalendarProvider : ICalendarProvider
     /// <summary>True when the calendar is usable (always true in App mode).</summary>
     public bool IsSignedIn { get; private set; }
 
-    /// <summary>Personal mode only: "To sign in, open https://microsoft.com/devicelogin and enter the code ...".</summary>
+    /// <summary>Personal mode only: "To sign in, use a web browser to open https://www.microsoft.com/link and enter the code ...".</summary>
     public string? SignInPrompt { get; private set; }
 
-    public bool NeedsInteractiveSignIn => _personalCredential is not null && !IsSignedIn;
+    public bool NeedsInteractiveSignIn => _personal is not null && !IsSignedIn;
 
-    /// <summary>Personal mode: runs the device-code sign-in and remembers the account. Completes when the owner has signed in.</summary>
+    /// <summary>Personal mode: runs the device-code sign-in. Completes when the owner has signed in (or the code expires).</summary>
     public async Task SignInAsync(CancellationToken ct)
     {
-        if (_personalCredential is null || IsSignedIn) return;
+        if (_personal is null || IsSignedIn) return;
 
-        var record = await _personalCredential.AuthenticateAsync(new TokenRequestContext(DelegatedScopes), ct);
-        Directory.CreateDirectory(Path.GetDirectoryName(_recordPath)!);
-        await using (var file = File.Create(_recordPath!))
-            await record.SerializeAsync(file, ct);
+        var user = await _personal.SignInAsync(message =>
+        {
+            SignInPrompt = message;
+            _log.LogWarning("Outlook calendar sign-in required: {Message}", message);
+            return Task.CompletedTask;
+        }, ct);
 
         IsSignedIn = true;
         SignInPrompt = null;
-        _log.LogInformation("Outlook calendar connected as {User}.", record.Username);
+        _log.LogInformation("Outlook calendar connected as {User}. The sign-in is saved; restarts will not ask again.", user);
     }
 
     public Task<IReadOnlyList<TimeSlot>> GetBusyAsync(DateTime fromUtc, DateTime toUtc, CancellationToken ct) => Guard(async () =>
@@ -181,30 +163,16 @@ public sealed class GraphCalendarProvider : ICalendarProvider
     private async Task<T> Guard<T>(Func<Task<T>> call)
     {
         if (NeedsInteractiveSignIn)
-            throw new InvalidOperationException("Outlook calendar is not signed in yet. " + (SignInPrompt ?? "See the dashboard for the sign-in code."));
+            throw new CalendarSignInRequiredException("Outlook calendar is not signed in yet. " + (SignInPrompt ?? "See the dashboard for the sign-in code."));
         try
         {
             return await call();
         }
-        catch (AuthenticationRequiredException ex)
+        catch (CalendarSignInRequiredException ex)
         {
-            _log.LogWarning(ex, "Outlook calendar token could not be refreshed silently: {Reason}", ex.InnerException?.Message ?? ex.Message);
+            _log.LogWarning("Outlook calendar needs a new sign-in: {Reason}", ex.Message);
             IsSignedIn = false; // the sign-in worker will show a new device code
-            throw new InvalidOperationException("Outlook calendar sign-in expired; sign in again with the code on the dashboard.", ex);
-        }
-    }
-
-    private static AuthenticationRecord? LoadRecord(string path)
-    {
-        if (!File.Exists(path)) return null;
-        try
-        {
-            using var file = File.OpenRead(path);
-            return AuthenticationRecord.Deserialize(file);
-        }
-        catch (Exception)
-        {
-            return null; // corrupt file: sign in again
+            throw;
         }
     }
 
