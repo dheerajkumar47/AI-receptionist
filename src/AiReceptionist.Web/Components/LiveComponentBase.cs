@@ -22,7 +22,7 @@ public abstract class LiveComponentBase : ComponentBase, IDisposable
     {
         await using (var db = await DbFactory.CreateDbContextAsync())
         {
-            var settings = await db.Settings.AsNoTracking().FirstOrDefaultAsync();
+            var settings = await db.Settings.AsNoTracking().OrderBy(s => s.Id).FirstOrDefaultAsync();
             Tz = TimeZoneResolver.Resolve(settings?.TimeZoneId);
         }
         Notifier.Changed += OnActivity;
