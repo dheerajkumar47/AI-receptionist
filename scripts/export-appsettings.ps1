@@ -5,8 +5,13 @@
 param([Parameter(Mandatory = $true)][string]$AppUrl)
 
 $skip = @('App:PublicBaseUrl', 'ConnectionStrings:Receptionist', 'Media:Directory', 'Microsoft365:TokenCachePath')
+$lines = dotnet user-secrets list --project src/AiReceptionist.Web
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "Could not read user-secrets (see the message above; usually the .NET 10 SDK is not installed). Nothing was copied."
+    exit 1
+}
 $settings = [ordered]@{}
-foreach ($line in (dotnet user-secrets list --project src/AiReceptionist.Web)) {
+foreach ($line in $lines) {
     $i = $line.IndexOf(' = ')
     if ($i -lt 1) { continue }
     $key = $line.Substring(0, $i).Trim()
