@@ -22,7 +22,7 @@ services, never quotes prices, and books a **free 30-minute consultation call**.
 | 7 | Public URL | ✅ | Microsoft Dev Tunnel `ai-receptionist` → `https://<tunnel-id>-5000.<region>.devtunnels.ms` |
 | 8 | WhatsApp | ✅ | Meta WhatsApp Cloud API, test number, app **not published** |
 | 9 | Facebook Messenger | ✅ | Same Meta app, Page "Dheeraj Software Solutions", app **not published** |
-| 10 | Instagram | ⏳ in progress | Same Meta app, "Instagram API with Instagram Login" (secrets: `Meta:Instagram:AccessToken`, `Meta:Instagram:ApiBaseUrl` = `https://graph.instagram.com`, `Meta:Instagram:AppSecret`) |
+| 10 | Instagram | ✅ connected (test webhook) | "Instagram API with Instagram Login". Real DMs need a **published** app (Instagram enforces it; WhatsApp and Messenger don't) |
 | 11 | X (Twitter) | ⏸ skipped | Needs a paid X API plan |
 | 12 | Deploy to Azure App Service | optional | docs/SETUP.md §9 |
 | 13 | Demo recording | ⏳ | docs/ACCEPTANCE-TEST.md |
@@ -145,6 +145,23 @@ URL: `https://<tunnel-id>-5000.<region>.devtunnels.ms` (use the `-5000` form). S
 5. Page → **Add subscriptions** → tick only **`messages`**.
 6. Test: from your **personal** Facebook profile (not acting as the Page), open the Page → **Message** → "Hi". Text and audio reply ✅.
 
+### 10. Instagram
+1. Business account = personal Instagram switched to **Professional**, with *Allow access to messages* ON (Settings → Messages → Connected tools).
+   A second Instagram account is used as the test "customer".
+2. Meta app → Use cases → **Manage messaging & content on Instagram** → *API setup with Instagram login*:
+   **Add all required permissions**; copy the **Instagram app secret** (different from the Meta app secret).
+3. App roles → Roles → add **both** accounts as **Instagram Tester**; accept at `instagram.com/accounts/manage_access/` → Tester invites.
+4. **Add account** (business) → Generate token. Secrets: `Meta:Instagram:AccessToken`, `Meta:Instagram:AppSecret`,
+   `Meta:Instagram:ApiBaseUrl` = `https://graph.instagram.com`.
+5. Webhook `https://<tunnel-id>-5000.<region>.devtunnels.ms/webhooks/instagram` + verify token → subscribe `messages`.
+6. Link the account to the app (like WhatsApp's `subscribed_apps`):
+   ```powershell
+   $ig = "<instagram token>"
+   Invoke-RestMethod -Method Post -Uri "https://graph.instagram.com/v21.0/me/subscribed_apps?subscribed_fields=messages&access_token=$ig"
+   ```
+7. Result: Meta's **Test** delivery (Configure webhooks → messages → Test) reaches the app ✅, but real DMs arrive only as
+   `"read"` events while the app is unpublished. Real Instagram DMs start working once the app is published (business verification).
+
 *Twilio (alternative WhatsApp provider):* the code is in the project (`Twilio:AccountSid` / `Twilio:AuthToken`), but Twilio signup
 rejected the Pakistani phone numbers. **Leave the Twilio secrets empty**, or the app would switch WhatsApp to Twilio.
 
@@ -171,6 +188,8 @@ rejected the Pakistani phone numbers. **Leave the Twilio secrets empty**, or the
 | Voice note on Messenger/Instagram gets "team will contact you" | Messenger audio is MP4, which the old speech-to-text rejected | (Fixed in code) Azure fast transcription handles MP4/AAC/OGG/MP3: `git pull`. Unclear notes now get "could you type it instead?" |
 | Customers speak Urdu/English mixed | — | Set `Speech:RecognitionLanguage` to `en-US,ur-IN` (auto-detects between them) |
 | Messenger "Verify and save" error | Access token pasted as verify token, or Messenger not *active* | Use the made-up `Meta:VerifyToken` word; save the Page token and restart first |
+| Instagram: only `"read"` events, never messages | Instagram delivers real DMs only to published apps | Use the Test delivery for demos; publish later |
+| Instagram verify fails, tunnel says "refused" | App wasn't running during verification | Start the app, test `/webhooks/instagram?hub.mode=subscribe&hub.verify_token=…&hub.challenge=12345` in a browser (should print 12345), retry |
 | Meta "Publish" button grey | Needs business verification | Not needed for testing; skip |
 | See whether Meta is calling at all | — | Open `https://<tunnel-id>-5000-inspect.<region>.devtunnels.ms` |
 
@@ -178,6 +197,7 @@ rejected the Pakistani phone numbers. **Leave the Twilio secrets empty**, or the
 
 ## Next steps
 
-1. **Instagram:** link an Instagram professional account to the Page → webhook `/webhooks/instagram`. Secret: `Meta:Instagram:AccessToken`.
-2. **Demo recording:** docs/ACCEPTANCE-TEST.md shot list.
-3. Optional: deploy to Azure App Service (docs/SETUP.md §9) so it runs without your PC.
+1. **Demo recording** (docs/ACCEPTANCE-TEST.md shot list): WhatsApp and Messenger live with voice, Outlook event, dashboard,
+   and Instagram via Meta's Test delivery.
+2. Optional: deploy to Azure App Service (docs/SETUP.md §9) so it runs without your PC.
+3. Optional later: business verification → publish the Meta app → Instagram DMs from anyone.
