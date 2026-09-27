@@ -292,7 +292,15 @@ For production, register your own WhatsApp sender in Twilio and set `Twilio:What
    dotnet user-secrets set "Meta:WhatsApp:AccessToken"   "<system user token>"
    dotnet user-secrets set "Meta:WhatsApp:PhoneNumberId" "<phone number id>"
    ```
-5. Test: from a verified recipient phone, message the test number. You can only send free-form replies within 24 hours of the customer's last message.
+5. **Link the WhatsApp Business Account to the app** (required; the dashboard's webhook tick alone is often not
+   enough, and without this Meta never sends real messages). Copy the *WhatsApp Business Account ID* from
+   *API Setup*, then run once:
+   ```powershell
+   $token = "<access token>"; $waba = "<WhatsApp Business Account ID>"
+   Invoke-RestMethod -Method Post -Uri "https://graph.facebook.com/v21.0/$waba/subscribed_apps" -Headers @{Authorization="Bearer $token"}
+   ```
+   Expected output: `success : True`.
+6. Test: from a verified recipient phone, message the test number. You can only send free-form replies within 24 hours of the customer's last message.
    The bot always replies inside that window. Voice replies arrive as playable voice notes (OGG/Opus), and your own voice notes are transcribed.
 
 To go live with your own number, add and verify it under *WhatsApp → API Setup → Add phone number*, then update `PhoneNumberId`.
@@ -368,6 +376,7 @@ confidence threshold, intents, rules) lives in the database and is edited in the
 | Symptom | Check |
 |---|---|
 | Meta says *"The URL couldn't be validated"* | The tunnel or app is running, `Meta:VerifyToken` matches, the channel's token is set (unconfigured channels return 404), and the URL is HTTPS. |
+| WhatsApp webhook verified but real messages never arrive | Run the `subscribed_apps` command in §7.4 step 5. Use the tunnel's inspect page (`https://<tunnel>-inspect...`) to see whether Meta calls you at all. |
 | Webhook calls are logged as *invalid signature* | `Meta:AppSecret` is the secret of the **same** app that sends the webhooks. |
 | Messages arrive but get no reply | Open the conversation in the dashboard. Is the bot paused (human takeover), or is **Require approval** on? Look for red errors on the reply. |
 | Messenger/Instagram error `(#10) ... outside of allowed window` or permission errors | The sender needs an app role while the app is in Development mode, and the Page token needs the listed permissions. |
