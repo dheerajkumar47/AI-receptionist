@@ -121,4 +121,16 @@ public sealed class FileMediaStore : IMediaStore
         await File.WriteAllBytesAsync(Path.Combine(_directory, fileName), clip.Data, ct);
         return $"{_baseUrl}/media/{fileName}";
     }
+
+    /// <summary>Maps a URL produced by <see cref="SaveAsync"/> back to the file on disk (so channels can upload it directly).</summary>
+    public bool TryGetLocalPath(string url, out string path)
+    {
+        path = "";
+        var i = url.IndexOf("/media/", StringComparison.Ordinal);
+        if (i < 0) return false;
+        var fileName = Path.GetFileName(url[(i + "/media/".Length)..]); // no directory traversal
+        if (string.IsNullOrEmpty(fileName)) return false;
+        path = Path.Combine(_directory, fileName);
+        return File.Exists(path);
+    }
 }

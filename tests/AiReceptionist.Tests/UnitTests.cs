@@ -466,3 +466,52 @@ public class TwilioWhatsAppTests
         Assert.Contains("MediaUrl=https%3A%2F%2Fbot.example.com%2Fmedia%2Fa.ogg", capture.Body);
     }
 }
+
+public class WhatsAppAudioUploadTests
+{
+    private sealed class Graph : HttpMessageHandler
+    {
+        public List<(string Url, string Body)> Calls { get; } = new();
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+        {
+            var body = request.Content is null ? "" : await request.Content.ReadAsStringAsync(ct);
+            Calls.Add((request.RequestUri!.ToString(), body));
+            var json = request.RequestUri!.AbsolutePath.EndsWith("/media") ? "{\"id\":\"MEDIA42\"}" : "{\"messages\":[{\"id\":\"wamid.1\"}]}";
+            return new HttpResponseMessage(System.Net.HttpStatusCode.OK) { Content = new StringContent(json) };
+        }
+    }
+
+    private sealed class Factory : IHttpClientFactory
+    {
+        private readonly HttpMessageHandler _h;
+        public Factory(HttpMessageHandler h) => _h = h;
+        public HttpClient CreateClient(string name) => new(_h, disposeHandler: false);
+    }
+
+    [Fact]
+    public async Task Voice_reply_is_uploaded_to_whatsapp_and_sent_by_media_id()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "air-media-" + Guid.NewGuid().ToString("N"));
+        var media = new FileMediaStore(
+            Microsoft.Extensions.Options.Options.Create(new AiReceptionist.Infrastructure.MediaOptions { Directory = dir }),
+            Microsoft.Extensions.Options.Options.Create(new AiReceptionist.Infrastructure.AppOptions { PublicBaseUrl = "https://bot.example.com" }));
+        var url = await media.SaveAsync(new AudioClip(new byte[] { 1, 2, 3 }, "audio/ogg", "ogg"), default);
+
+        var graph = new Graph();
+        var channel = new WhatsAppChannel(new Factory(graph), Microsoft.Extensions.Options.Options.Create(new AiReceptionist.Infrastructure.MetaOptions
+        {
+            AppSecret = "s", VerifyToken = "v",
+            WhatsApp = new AiReceptionist.Infrastructure.WhatsAppOptions { AccessToken = "t", PhoneNumberId = "PNID" },
+        }), media);
+
+        var result = await channel.SendAsync(new OutboundMessage("whatsapp", "923001234567", null, url), default);
+
+        Assert.True(result.Success);
+        Assert.Equal(2, graph.Calls.Count);
+        Assert.EndsWith("/PNID/media", graph.Calls[0].Url);
+        Assert.EndsWith("/PNID/messages", graph.Calls[1].Url);
+        Assert.Contains("\"id\":\"MEDIA42\"", graph.Calls[1].Body);
+        Assert.DoesNotContain("link", graph.Calls[1].Body);
+        Directory.Delete(dir, true);
+    }
+}

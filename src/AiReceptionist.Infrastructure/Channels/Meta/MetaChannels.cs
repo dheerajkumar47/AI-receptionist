@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using AiReceptionist.Core.Abstractions;
 using ChannelIds = AiReceptionist.Core.Domain.Channels;
+using AiReceptionist.Infrastructure.Voice;
 using Microsoft.Extensions.Options;
 
 namespace AiReceptionist.Infrastructure.Channels.Meta;
@@ -110,7 +111,10 @@ public sealed class InstagramChannel : MetaChannelBase
 /// <summary>WhatsApp Business via the WhatsApp Cloud API. Voice replies are delivered as OGG/Opus voice notes.</summary>
 public sealed class WhatsAppChannel : MetaChannelBase, IAudioDownloadChannel
 {
-    public WhatsAppChannel(IHttpClientFactory http, IOptions<MetaOptions> options) : base(http, options) { }
+    private readonly FileMediaStore? _media;
+
+    public WhatsAppChannel(IHttpClientFactory http, IOptions<MetaOptions> options, FileMediaStore? media = null) : base(http, options)
+        => _media = media;
 
     public override string ChannelId => ChannelIds.WhatsApp;
     public override string DisplayName => "WhatsApp Business";
@@ -123,9 +127,20 @@ public sealed class WhatsAppChannel : MetaChannelBase, IAudioDownloadChannel
 
     public override async Task<SendResult> SendAsync(OutboundMessage message, CancellationToken ct)
     {
-        object body = message.AudioUrl is not null
-            ? new { messaging_product = "whatsapp", recipient_type = "individual", to = message.RecipientId, type = "audio", audio = new { link = message.AudioUrl } }
-            : new { messaging_product = "whatsapp", recipient_type = "individual", to = message.RecipientId, type = "text", text = new { preview_url = false, body = message.Text } };
+        object body;
+        if (message.AudioUrl is not null)
+        {
+            // Prefer uploading the clip to WhatsApp and sending it by media id: WhatsApp's media fetcher is strict about
+            // links (tunnels, interstitial pages, content types), while an upload always works.
+            var mediaId = await TryUploadAudioAsync(message.AudioUrl, ct);
+            body = mediaId is not null
+                ? new { messaging_product = "whatsapp", recipient_type = "individual", to = message.RecipientId, type = "audio", audio = (object)new { id = mediaId } }
+                : new { messaging_product = "whatsapp", recipient_type = "individual", to = message.RecipientId, type = "audio", audio = (object)new { link = message.AudioUrl } };
+        }
+        else
+        {
+            body = new { messaging_product = "whatsapp", recipient_type = "individual", to = message.RecipientId, type = "text", text = new { preview_url = false, body = message.Text } };
+        }
 
         var (ok, doc, error) = await PostJsonAsync(GraphUrl($"{Meta.WhatsApp.PhoneNumberId}/messages"), body, ct);
         using (doc)
@@ -136,6 +151,28 @@ public sealed class WhatsAppChannel : MetaChannelBase, IAudioDownloadChannel
                 : null;
             return SendResult.Ok(id);
         }
+    }
+
+    /// <summary>Uploads a locally stored clip via POST /{phone-number-id}/media and returns the WhatsApp media id.</summary>
+    private async Task<string?> TryUploadAudioAsync(string audioUrl, CancellationToken ct)
+    {
+        if (_media is null || !_media.TryGetLocalPath(audioUrl, out var path)) return null;
+
+        var contentType = path.EndsWith(".ogg", StringComparison.OrdinalIgnoreCase) ? "audio/ogg" : "audio/mpeg";
+        using var form = new MultipartFormDataContent();
+        form.Add(new StringContent("whatsapp"), "messaging_product");
+        form.Add(new StringContent(contentType), "type");
+        var file = new ByteArrayContent(await File.ReadAllBytesAsync(path, ct));
+        file.Headers.ContentType = new MediaTypeHeaderValue(contentType);
+        form.Add(file, "file", Path.GetFileName(path));
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, GraphUrl($"{Meta.WhatsApp.PhoneNumberId}/media")) { Content = form };
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", AccessToken);
+        using var response = await Client.SendAsync(request, ct);
+        if (!response.IsSuccessStatusCode) return null; // fall back to sending the link
+
+        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
+        return doc.RootElement.TryGetProperty("id", out var id) ? id.GetString() : null;
     }
 
     /// <summary>Two-step media download: resolve the media id to a short-lived URL, then fetch it with the token.</summary>

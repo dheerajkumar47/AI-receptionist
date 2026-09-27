@@ -21,7 +21,7 @@ services, never quotes prices, and books a **free 30-minute consultation call**.
 | 6 | Email fallback | ✅ | Gmail SMTP with an App Password |
 | 7 | Public URL | ✅ | Microsoft Dev Tunnel `ai-receptionist` → `https://<tunnel-id>-5000.<region>.devtunnels.ms` |
 | 8 | WhatsApp | ✅ | Meta WhatsApp Cloud API, test number, app **not published** |
-| 9 | Facebook Messenger | ⏳ | Same Meta app |
+| 9 | Facebook Messenger | ✅ | Same Meta app, Page "Dheeraj Software Solutions", app **not published** |
 | 10 | Instagram | ⏳ | Same Meta app |
 | 11 | X (Twitter) | ⏸ skipped | Needs a paid X API plan |
 | 12 | Deploy to Azure App Service | optional | docs/SETUP.md §9 |
@@ -136,6 +136,15 @@ URL: `https://<tunnel-id>-5000.<region>.devtunnels.ms` (use the `-5000` form). S
    Unpublished works for your own number plus up to 5 recipient numbers (API Setup → To → Manage phone number list).
    Don't submit App Review. If a review request was added by mistake, delete it with the trash icons.
 
+### 9. Facebook Messenger
+1. Created the Facebook Page **Dheeraj Software Solutions**.
+2. Meta app → ✏️ Use cases → **Add use case** → *Engage with customers on Messenger from Meta* → **Customize**.
+3. **Generate access tokens** → Connect the Page → Generate → secret `Meta:Facebook:PageAccessToken` (restart; the Dashboard shows Messenger *active*).
+4. **Configure webhooks**: Callback `https://<tunnel-id>-5000.<region>.devtunnels.ms/webhooks/facebook`, Verify token = the **made-up word**
+   saved as `Meta:VerifyToken` (**not** an access token).
+5. Page → **Add subscriptions** → tick only **`messages`**.
+6. Test: from your **personal** Facebook profile (not acting as the Page), open the Page → **Message** → "Hi". Text and audio reply ✅.
+
 *Twilio (alternative WhatsApp provider):* the code is in the project (`Twilio:AccountSid` / `Twilio:AuthToken`), but Twilio signup
 rejected the Pakistani phone numbers. **Leave the Twilio secrets empty**, or the app would switch WhatsApp to Twilio.
 
@@ -158,6 +167,8 @@ rejected the Pakistani phone numbers. **Leave the Twilio secrets empty**, or the
 | WhatsApp webhook verified but no messages | WhatsApp account not linked to the app | Run the `subscribed_apps` command (step 8.6) |
 | WhatsApp: `0 message(s) queued` lines | Delivery/read receipts, which is normal | Ignore; the payload is logged below the line |
 | WhatsApp replies stop after a day | Temporary 24-hour token | Use the permanent system-user token (step 8.7) |
+| WhatsApp text arrives but no voice note | WhatsApp rejected the audio *link* | (Fixed in code) audio is now uploaded to WhatsApp and sent by media id: `git pull` |
+| Messenger "Verify and save" error | Access token pasted as verify token, or Messenger not *active* | Use the made-up `Meta:VerifyToken` word; save the Page token and restart first |
 | Meta "Publish" button grey | Needs business verification | Not needed for testing; skip |
 | See whether Meta is calling at all | — | Open `https://<tunnel-id>-5000-inspect.<region>.devtunnels.ms` |
 
@@ -165,7 +176,6 @@ rejected the Pakistani phone numbers. **Leave the Twilio secrets empty**, or the
 
 ## Next steps
 
-1. **Facebook Messenger:** same Meta app → add the *Engage with customers on Messenger* use case → Page token → webhook `/webhooks/facebook` → subscribe `messages`. Secret: `Meta:Facebook:PageAccessToken`.
-2. **Instagram:** link an Instagram professional account to the Page → webhook `/webhooks/instagram`. Secret: `Meta:Instagram:AccessToken`.
-3. **Demo recording:** docs/ACCEPTANCE-TEST.md shot list.
-4. Optional: deploy to Azure App Service (docs/SETUP.md §9) so it runs without your PC.
+1. **Instagram:** link an Instagram professional account to the Page → webhook `/webhooks/instagram`. Secret: `Meta:Instagram:AccessToken`.
+2. **Demo recording:** docs/ACCEPTANCE-TEST.md shot list.
+3. Optional: deploy to Azure App Service (docs/SETUP.md §9) so it runs without your PC.
