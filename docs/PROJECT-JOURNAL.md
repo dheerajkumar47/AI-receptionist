@@ -172,6 +172,10 @@ rejected the Pakistani phone numbers. **Leave the Twilio secrets empty**, or the
 
 ### 11. Azure deployment (live 24/7, no terminal)
 
+**Done so far:** Web App `AI-receptionist` created (28 Sep 2026) in resource group `AI-receptionist_group`, Central India,
+Linux, .NET 10 (LTS), Basic B1 (~13 USD/month), Application Insights on, no database/cache/VNet, continuous deployment off.
+(West US 3 failed with "No available instances"; the create wizard's optional PostgreSQL + Redis were removed: not used, ~$250/month.)
+
 Follow docs/SETUP.md §9. Summary: Linux Web App (.NET 10 LTS, B1) → Always On + Web sockets + SCM Basic Auth on →
 `scripts\export-appsettings.ps1` pastes all secrets into *Environment variables → Advanced edit* → publish profile as the
 GitHub secret `AZURE_WEBAPP_PUBLISH_PROFILE` and app name as the variable `AZURE_WEBAPP_NAME` → run **Deploy to Azure**
