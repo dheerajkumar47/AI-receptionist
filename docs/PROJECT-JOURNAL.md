@@ -176,7 +176,9 @@ rejected the Pakistani phone numbers. **Leave the Twilio secrets empty**, or the
 Linux, .NET 10 (LTS), Basic B1 (~13 USD/month), Application Insights on, no database/cache/VNet, continuous deployment off.
 GitHub secret + variable added; first **Deploy to Azure** run succeeded (27 Sep 2026).
 Secrets pasted into App settings; live dashboard `https://<your-app>.azurewebsites.net`
-shows AI, Voice, Outlook, Email and Messenger/Instagram/WhatsApp **active**. Remaining: fill Settings, Outlook sign-in, move Meta webhooks.
+shows AI, Voice, Outlook, Email and Messenger/Instagram/WhatsApp **active**. Settings filled for Dheeraj Software Solutions,
+simulator booking OK, Meta webhooks + privacy URL moved to Azure. **WhatsApp and Messenger work live with the PC off** ✅.
+Instagram: same as before (real DMs need the Meta app published). The dev tunnel is now only for local development.
 (West US 3 failed with "No available instances"; the create wizard's optional PostgreSQL + Redis were removed: not used, ~$250/month.)
 
 Follow docs/SETUP.md §9. Summary: Linux Web App (.NET 10 LTS, B1) → Always On + Web sockets + SCM Basic Auth on →
