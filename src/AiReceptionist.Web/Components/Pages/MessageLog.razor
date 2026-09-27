@@ -27,8 +27,8 @@
         {
             <tr>
                 <td class="nowrap">@Local(m.CreatedUtc)</td>
-                <td>@Ui.ChannelIcon(m.Channel) @m.Channel</td>
-                <td><a href="conversations/@m.ConversationId">@(m.Conversation.Contact.DisplayName ?? m.Conversation.Contact.ExternalUserId)</a></td>
+                <td class="nowrap">@Ui.ChannelIcon(m.Channel) @m.Channel</td>
+                <td class="nowrap"><a href="conversations/@m.ConversationId">@(m.Conversation.Contact.DisplayName ?? m.Conversation.Contact.ExternalUserId)</a></td>
                 <td>@(m.Direction == MessageDirection.Inbound ? "in" : "out")</td>
                 <td>
                     @Ui.Truncate(m.Text, 140)

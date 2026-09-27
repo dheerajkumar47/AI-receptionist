@@ -59,7 +59,12 @@ services, never quotes prices, and books a **free 30-minute consultation call**.
 | Simulator | Chat as a fake customer: the full pipeline without any social platform |
 | Intents | What customers want and how the bot reacts; edits apply to the next message |
 | Rules | Keyword/regex rules checked before the AI (e.g. "urgent" → human) |
-| Settings | Business info, hours, time zone, reply templates, voice, approval mode, **Check availability**, **Test voice**, **Send test email** |
+| Settings | Business info, hours, time zone, reply templates, voice, approval mode, **Check availability**, **Test voice**, **Send test email**, **Start fresh** (clear all chats) |
+
+**Start fresh (clear all test chats):** Settings → *Start fresh* → **Delete all conversation history…** → **Yes, delete everything**.
+It deletes contacts, conversations, messages and appointment records (tick the box to also delete saved voice files).
+It **keeps** settings, intents, rules, secrets and the Outlook sign-in. Events already booked stay in Outlook: delete them there.
+Don't delete the `data` folder instead: that also removes the Outlook sign-in (`outlook-token-cache.bin`) and your Settings page values.
 
 **Public pages:** `/health` (tunnel check), `/privacy` (privacy policy used for the Meta app).
 
@@ -191,6 +196,7 @@ rejected the Pakistani phone numbers. **Leave the Twilio secrets empty**, or the
 | Instagram: only `"read"` events, never messages | Instagram delivers real DMs only to published apps | Use the Test delivery for demos; publish later |
 | Instagram verify fails, tunnel says "refused" | App wasn't running during verification | Start the app, test `/webhooks/instagram?hub.mode=subscribe&hub.verify_token=…&hub.challenge=12345` in a browser (should print 12345), retry |
 | Meta "Publish" button grey | Needs business verification | Not needed for testing; skip |
+| Dashboard parts cut off / page scrolls sideways | (Fixed in code) layout wasn't responsive | `git pull`, restart, then **Ctrl+F5** in the browser. Wide tables now scroll inside their card; on a phone the menu moves to the top |
 | See whether Meta is calling at all | — | Open `https://<tunnel-id>-5000-inspect.<region>.devtunnels.ms` |
 
 ---

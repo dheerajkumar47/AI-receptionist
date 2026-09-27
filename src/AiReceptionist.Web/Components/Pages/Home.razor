@@ -31,7 +31,7 @@
 <div class="grid-2">
     <section class="card">
         <h2>Services</h2>
-        <table class="table">
+        <table class="table compact">
             <tr><td>Language understanding</td><td>@Engine.Name</td><td>@Status(Engine is not KeywordIntentEngine, "offline mode")</td></tr>
             <tr><td>Voice (Azure AI Speech)</td><td></td><td>@Status(Voice.IsConfigured)</td></tr>
             <tr><td>Outlook / Microsoft 365 calendar</td><td></td><td>@Status(Calendar is GraphCalendarProvider g ? !g.NeedsInteractiveSignIn : Calendar.IsConfigured, Calendar.IsConfigured ? "sign-in needed" : "not configured")</td></tr>
@@ -41,7 +41,8 @@
 
     <section class="card">
         <h2>Channels</h2>
-        <table class="table">
+        <p class="small muted">Webhook base: <code>@AppOptions.Value.PublicBaseUrl.TrimEnd('/')</code></p>
+        <table class="table compact">
             @foreach (var c in ChannelConnectors)
             {
                 <tr>
@@ -49,7 +50,7 @@
                     <td class="small">
                         @if (c is IWebhookChannel)
                         {
-                            <code>@($"{AppOptions.Value.PublicBaseUrl.TrimEnd('/')}/webhooks/{c.ChannelId}")</code>
+                            <code class="url-path" title="@($"{AppOptions.Value.PublicBaseUrl.TrimEnd('/')}/webhooks/{c.ChannelId}")">/webhooks/@c.ChannelId</code>
                         }
                         else if (c is IPollingChannel p)
                         {
@@ -77,10 +78,10 @@
             <tr>
                 <td class="nowrap">@Local(m.CreatedUtc)</td>
                 <td>@Ui.ChannelIcon(m.Channel)</td>
-                <td><a href="conversations/@m.ConversationId">@(m.Conversation.Contact.DisplayName ?? m.Conversation.Contact.ExternalUserId)</a></td>
+                <td class="nowrap"><a href="conversations/@m.ConversationId">@(m.Conversation.Contact.DisplayName ?? m.Conversation.Contact.ExternalUserId)</a></td>
                 <td>@(m.Direction == MessageDirection.Inbound ? "⬅️" : "➡️")@(m.AudioUrl is not null ? " 🔊" : "")</td>
                 <td>@Ui.Truncate(m.Text, 90)</td>
-                <td>@m.Intent</td>
+                <td class="nowrap">@m.Intent</td>
                 <td><span class="@Ui.StatusClass(m.Status)">@m.Status</span></td>
             </tr>
         }

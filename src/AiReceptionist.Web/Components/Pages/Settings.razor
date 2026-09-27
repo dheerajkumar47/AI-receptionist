@@ -4,6 +4,7 @@
 @inject IMediaStore Media
 @inject IEmailSender Email
 @inject AvailabilityService Availability
+@inject AiReceptionist.Infrastructure.Voice.FileMediaStore MediaFiles
 
 <PageTitle>Settings · AI Receptionist</PageTitle>
 <h1>Settings</h1>
@@ -76,6 +77,26 @@
         <button class="btn" @onclick="TestEmail" disabled="@(!Email.IsConfigured)">Send test email</button>
     </section>
 
+    <section class="card danger-zone">
+        <h2>Start fresh</h2>
+        <p class="small muted">
+            Deletes all contacts, conversations, messages and appointment records so the dashboard starts empty.
+            Settings, intents, rules and the Outlook sign-in are kept. Events already booked in Outlook stay in your calendar.
+        </p>
+        @if (!_confirmReset)
+        {
+            <button class="btn danger" @onclick="() => _confirmReset = true">Delete all conversation history…</button>
+        }
+        else
+        {
+            <label class="check"><input type="checkbox" @bind="_resetMedia" /> Also delete saved voice files</label>
+            <div class="row">
+                <button class="btn primary" style="background: var(--danger); border-color: var(--danger)" @onclick="ResetHistory">Yes, delete everything</button>
+                <button class="btn" @onclick="() => _confirmReset = false">Cancel</button>
+            </div>
+        }
+    </section>
+
     <div class="sticky-save">
         <button class="btn primary" @onclick="Save">Save settings</button>
     </div>
@@ -85,7 +106,7 @@
     private BotSettings? _s;
     private string? _message, _slots, _voiceUrl;
     private string _voiceSample = "Hi! Thanks for getting in touch. Your appointment is confirmed.";
-    private bool _isError;
+    private bool _isError, _confirmReset, _resetMedia;
 
     protected override bool ShouldReload(ActivityEvent evt) => false;
 
@@ -139,6 +160,28 @@
             Show($"Test email sent to {Email.OwnerAddress}.", false);
         }
         catch (Exception ex) { Show("Email test failed: " + ex.Message, true); }
+    }
+
+    private async Task ResetHistory()
+    {
+        try
+        {
+            await using var db = await DbFactory.CreateDbContextAsync();
+            var r = await DataReset.ClearHistoryAsync(db);
+            var files = 0;
+            if (_resetMedia)
+            {
+                foreach (var f in Directory.EnumerateFiles(MediaFiles.PhysicalDirectory))
+                {
+                    try { File.Delete(f); files++; } catch (IOException) { /* in use; skip */ }
+                }
+            }
+            _confirmReset = false;
+            _voiceUrl = null;
+            Show($"Done. Deleted {r.Contacts} contacts, {r.Conversations} conversations, {r.Messages} messages, " +
+                 $"{r.Appointments} appointments{(_resetMedia ? $" and {files} voice files" : "")}.", false);
+        }
+        catch (Exception ex) { Show("Reset failed: " + ex.Message, true); }
     }
 
     private void Show(string message, bool isError) { _message = message; _isError = isError; }

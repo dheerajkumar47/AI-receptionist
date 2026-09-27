@@ -41,13 +41,12 @@ code { font-size: 12px; background: var(--accent-soft); padding: 1px 5px; border
 .sidebar .logout { color: var(--muted); }
 .content { flex: 1; padding: 24px 28px; min-width: 0; }
 
-.card { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px; margin-bottom: 16px; }
+.card { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px; margin-bottom: 16px; min-width: 0; overflow-x: auto; }
 .card.disabled { opacity: .6; }
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .grid-main { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; align-items: start; }
-@media (max-width: 1000px) { .grid-2, .grid-main { grid-template-columns: 1fr; } .sidebar { width: 170px; } }
 
-.page-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 12px; }
+.page-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 12px; flex-wrap: wrap; }
 .page-header h1 { margin-bottom: 2px; }
 .actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .toolbar { display: flex; gap: 10px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
@@ -55,7 +54,7 @@ code { font-size: 12px; background: var(--accent-soft); padding: 1px 5px; border
 .row .spacer { flex: 1; }
 .grow { flex: 1; }
 
-.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 16px; }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 16px; margin-bottom: 16px; }
 .stat { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 18px; color: var(--muted); display: block; }
 .stat span { display: block; font-size: 28px; font-weight: 700; color: var(--text); }
 .stat.alert span { color: var(--danger); }
@@ -73,7 +72,7 @@ a.stat:hover { text-decoration: none; border-color: var(--accent); }
 .muted { color: var(--muted); }
 .error { color: var(--danger); }
 
-.badge { display: inline-block; font-size: 11px; padding: 1px 7px; border-radius: 99px; background: var(--accent-soft); color: var(--accent); margin-left: 4px; }
+.badge { display: inline-block; white-space: nowrap; font-size: 11px; padding: 1px 7px; border-radius: 99px; background: var(--accent-soft); color: var(--accent); margin-left: 4px; }
 .badge.ok { background: var(--ok-soft); color: var(--ok); }
 .badge.warn { background: var(--warn-soft); color: var(--warn); }
 .badge.danger { background: var(--danger-soft); color: var(--danger); }
@@ -89,8 +88,8 @@ input, select, textarea { font: inherit; color: var(--text); background: var(--b
 input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
 textarea { resize: vertical; width: 100%; }
 input.narrow { width: 70px !important; }
-.form-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0 12px; align-items: end; }
-.form-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
+.form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 0 12px; align-items: end; }
+.form-grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 0 12px; }
 
 .btn { font: inherit; border: 1px solid var(--border); background: var(--panel); color: var(--text); border-radius: 7px; padding: 7px 14px; cursor: pointer; }
 .btn:hover:not(:disabled) { border-color: var(--accent); }
@@ -122,3 +121,30 @@ audio.mini { height: 28px; display: block; margin-top: 4px; }
 .login-card button { margin-top: 6px; }
 
 #blazor-error-ui { display: none; position: fixed; bottom: 0; left: 0; right: 0; padding: 10px 16px; background: var(--danger-soft); color: var(--danger); z-index: 1000; }
+
+/* Tables keep readable column widths and scroll inside their card instead of stretching the page. */
+.table { min-width: 560px; }
+.table.compact { min-width: 0; }
+.url-path { white-space: nowrap; }
+.danger-zone { border-color: var(--danger); }
+.danger-zone h2 { color: var(--danger); }
+.bubble .text, .card p, .notice { overflow-wrap: anywhere; }
+.table td { overflow-wrap: break-word; }
+.bubble audio { max-width: 100%; }
+
+/* Responsive: these stay last so they override the base rules above. */
+@media (max-width: 1000px) { .grid-2, .grid-main { grid-template-columns: 1fr; } .sidebar { width: 170px; } }
+@media (max-width: 800px) {
+    .shell { flex-direction: column; }
+    .sidebar { width: auto; height: auto; position: static; flex-direction: row; flex-wrap: wrap; align-items: center;
+               border-right: none; border-bottom: 1px solid var(--border); padding: 8px; gap: 4px; }
+    .sidebar .brand { padding: 4px 10px; white-space: nowrap; width: 100%; }
+    .sidebar a { padding: 6px 10px; }
+    .sidebar .nav-section, .sidebar .spacer { display: none; }
+    .sidebar a { white-space: nowrap; }
+    .content { padding: 16px; }
+    .bubble { max-width: 92%; }
+    .bubble audio { min-width: 0; }
+    .thread { min-height: 300px; }
+    h1 { font-size: 19px; }
+}

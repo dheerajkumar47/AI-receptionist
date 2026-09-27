@@ -1,4 +1,5 @@
 using AiReceptionist.Core.Abstractions;
+using AiReceptionist.Core.Data;
 using AiReceptionist.Core.Domain;
 using AiReceptionist.Core.Scheduling;
 using Microsoft.EntityFrameworkCore;
@@ -8,6 +9,33 @@ namespace AiReceptionist.Tests;
 public class ConversationServiceTests
 {
     private static readonly DateTime TuesdayNoon = new(2026, 9, 29, 12, 0, 0, DateTimeKind.Utc);
+
+    [Fact]
+    public async Task Start_fresh_clears_history_but_keeps_configuration()
+    {
+        await using var h = new TestHarness();
+        await h.SendAsync("Can I book an appointment tomorrow afternoon?");
+        await h.SendAsync("Yes please");
+
+        int intents, rules;
+        await using (var db = h.Db())
+        {
+            intents = await db.Intents.CountAsync();
+            rules = await db.Rules.CountAsync();
+            var result = await DataReset.ClearHistoryAsync(db);
+            Assert.Equal(1, result.Contacts);
+            Assert.True(result.Messages > 0);
+        }
+
+        await using var after = h.Db();
+        Assert.Empty(after.Messages);
+        Assert.Empty(after.Appointments);
+        Assert.Empty(after.Conversations);
+        Assert.Empty(after.Contacts);
+        Assert.Equal(intents, await after.Intents.CountAsync());
+        Assert.Equal(rules, await after.Rules.CountAsync());
+        Assert.Single(after.Settings);
+    }
 
     [Fact]
     public async Task Greeting_is_answered_with_text_and_voice()
