@@ -1,4 +1,4 @@
-# AI Receptionist (.NET 8 / C#)
+# AI Receptionist (.NET 10 / C#)
 
 An AI receptionist that answers direct messages on **Facebook Messenger, Instagram, WhatsApp and X (Twitter)**.
 It works out what the sender wants, replies in natural language as **text and/or a synthesized voice note**,
@@ -22,7 +22,7 @@ message, lets you override replies, pause the bot per conversation, and edit int
 
 ## Quick start (offline mode, about 2 minutes)
 
-Requirements: [.NET 8 SDK](https://dotnet.microsoft.com/download) and Visual Studio 2022 17.8+ (or VS Code / Rider).
+Requirements: [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) and Visual Studio 2026 (or VS Code with C# Dev Kit / Rider).
 
 ```bash
 git clone <this repo>

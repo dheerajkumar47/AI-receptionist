@@ -27,7 +27,7 @@ configured, and you can test each piece on its own before the next. Suggested or
 
 ## 1. Run locally
 
-1. Install the [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0). With Visual Studio, install 2022 17.8 or later with the *ASP.NET and web development* workload.
+1. Install the [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0). With Visual Studio, install Visual Studio 2026 with the *ASP.NET and web development* workload.
 2. Trust the development HTTPS certificate (one time): `dotnet dev-certs https --trust`
 3. Set a dashboard password:
    ```bash
@@ -334,7 +334,7 @@ implement `IWebhookChannel` on `TwitterDmChannel` (see ARCHITECTURE.md).
 Runs the receptionist 24/7 at `https://<app>.azurewebsites.net`, with no PC, terminal or dev tunnel. Every push to `main`
 is built, tested and deployed automatically by `.github/workflows/deploy-azure.yml`.
 
-1. **Create the Web App** (portal → *Create a resource* → *Web App*): publish **Code**, runtime **.NET 8 (LTS)**,
+1. **Create the Web App** (portal → *Create a resource* → *Web App*): publish **Code**, runtime **.NET 10 (LTS)**,
    operating system **Linux**, region near your customers, pricing plan **Basic B1** (Free F1 works for a quick trial but
    sleeps when idle, so the first reply after a quiet period is slow). The app name becomes the URL.
 2. **Configuration → General settings**: **Always On** = On, **Web sockets** = On (the dashboard needs them),

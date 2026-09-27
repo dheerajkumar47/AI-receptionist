@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-AI receptionist for social DMs (WhatsApp, Messenger, Instagram, X) in C# / .NET 8: Azure OpenAI intent + replies,
+AI receptionist for social DMs (WhatsApp, Messenger, Instagram, X) in C# / .NET 10 (LTS): Azure OpenAI intent + replies,
 Azure Speech voice, Microsoft Graph calendar booking with SMTP fallback, Blazor Server admin dashboard.
 
 **Before helping the owner, read [docs/PROJECT-JOURNAL.md](docs/PROJECT-JOURNAL.md)**. It records what is already

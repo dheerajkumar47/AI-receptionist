@@ -12,7 +12,7 @@ services, never quotes prices, and books a **free 30-minute consultation call**.
 
 | # | Part | Status | Provider |
 |---|---|---|---|
-| 0 | Local run (VS Code, .NET 8) | ✅ | — |
+| 0 | Local run (VS Code, .NET 10) | ✅ | — |
 | 1 | Business settings | ✅ | Dashboard → Settings |
 | 2 | Intents (software business) | ✅ | Dashboard → Intents → *Restore recommended intents* |
 | 3 | AI understanding and replies | ✅ | Azure OpenAI, deployment `gpt-4.1-mini` |
@@ -73,7 +73,7 @@ Don't delete the `data` folder instead: that also removes the Outlook sign-in (`
 ## Setup record, in order
 
 ### 0. Local run
-1. Installed the .NET 8 SDK and the VS Code **C# Dev Kit** extension; cloned the repo to `D:\AI-receptionist`.
+1. Installed the .NET 8 SDK (upgraded to **.NET 10 SDK** on 27 Sep 2026, because .NET 8 support ends 10 Nov 2026) and the VS Code **C# Dev Kit** extension; cloned the repo to `D:\AI-receptionist`.
 2. `dotnet dev-certs https --trust`
 3. `dotnet user-secrets set "Admin:Password" "<password>" --project src/AiReceptionist.Web`
 4. Tests: `dotnet test` (all pass).
@@ -172,7 +172,7 @@ rejected the Pakistani phone numbers. **Leave the Twilio secrets empty**, or the
 
 ### 11. Azure deployment (live 24/7, no terminal)
 
-Follow docs/SETUP.md §9. Summary: Linux Web App (.NET 8, B1) → Always On + Web sockets + SCM Basic Auth on →
+Follow docs/SETUP.md §9. Summary: Linux Web App (.NET 10 LTS, B1) → Always On + Web sockets + SCM Basic Auth on →
 `scripts\export-appsettings.ps1` pastes all secrets into *Environment variables → Advanced edit* → publish profile as the
 GitHub secret `AZURE_WEBAPP_PUBLISH_PROFILE` and app name as the variable `AZURE_WEBAPP_NAME` → run **Deploy to Azure**
 in GitHub Actions → fill Settings and sign in to Outlook on the live dashboard → change the 3 Meta webhook URLs and the
@@ -206,7 +206,8 @@ Live data is in `/home/data` on the App Service (kept across restarts and deploy
 | Instagram verify fails, tunnel says "refused" | App wasn't running during verification | Start the app, test `/webhooks/instagram?hub.mode=subscribe&hub.verify_token=…&hub.challenge=12345` in a browser (should print 12345), retry |
 | Meta "Publish" button grey | Needs business verification | Not needed for testing; skip |
 | Dashboard parts cut off / page scrolls sideways | (Fixed in code) layout wasn't responsive | `git pull`, restart, then **Ctrl+F5** in the browser. Wide tables now scroll inside their card; on a phone the menu moves to the top |
-| Azure create screen offers .NET 10, Windows, Continuous deployment | Portal defaults | Choose **.NET 8 (LTS)** (the app targets .NET 8), **Linux** (Outlook sign-in storage), and **Disable** continuous deployment (the repo already has its own workflow) |
+| Azure create screen: runtime, OS, continuous deployment | Portal defaults | Choose **.NET 10 (LTS)** (the app targets .NET 10), **Linux** (Outlook sign-in storage), and **Disable** continuous deployment (the repo already has its own workflow) |
+| `dotnet run` says "A compatible .NET SDK was not found" (needs 10.0) | Project moved to .NET 10 | Install the .NET 10 SDK from dotnet.microsoft.com/download/dotnet/10.0, reopen VS Code |
 | Azure: GitHub **Deploy to Azure** fails at *webapps-deploy* | Publish profile missing/old, or SCM Basic Auth off | Turn SCM Basic Auth on, download the profile again, update the secret, re-run |
 | Azure: dashboard loads but buttons do nothing | Web sockets off | App Service → Configuration → Web sockets **On** |
 | Azure: app shows an error page after deploy | A setting is missing or mistyped | App Service → *Log stream*; check the names use `__` (e.g. `OpenAI__ApiKey`) |
