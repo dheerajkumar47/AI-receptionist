@@ -331,23 +331,36 @@ implement `IWebhookChannel` on `TwitterDmChannel` (see ARCHITECTURE.md).
 
 ## 9. Deploy to Azure App Service
 
-1. Create a **Web App**: publish *Code*, runtime stack **.NET 8 (LTS)**, Windows or Linux, B1 or higher.
-2. *Configuration → General settings*: turn **Always On** on (keeps background workers and X polling alive) and **Web sockets** on (for Blazor Server).
-3. *Environment variables*: add every setting from sections 3–8 using `__`, e.g. `OpenAI__ApiKey`, `Meta__WhatsApp__PhoneNumberId`. Also set:
-   | Name | Value |
-   |---|---|
-   | `App__PublicBaseUrl` | `https://<app>.azurewebsites.net` |
-   | `Admin__Password` | a strong password |
-   | `ConnectionStrings__Receptionist` | Linux: `Data Source=/home/data/receptionist.db` · Windows: `Data Source=D:\home\data\receptionist.db` |
-   | `Media__Directory` | Linux: `/home/data/media` · Windows: `D:\home\data\media` |
-4. Deploy. In Visual Studio: right-click `AiReceptionist.Web` → **Publish** → Azure App Service. From the CLI:
-   ```bash
-   dotnet publish src/AiReceptionist.Web -c Release -o publish
-   cd publish && zip -r ../app.zip . && cd ..
-   az webapp deploy --resource-group <rg> --name <app> --src-path app.zip --type zip
-   ```
-5. Keep the app on **one instance**. It uses SQLite and an in-memory queue. See ARCHITECTURE.md for scaling out.
-6. Update the three Meta webhook callback URLs to the App Service URL.
+Runs the receptionist 24/7 at `https://<app>.azurewebsites.net`, with no PC, terminal or dev tunnel. Every push to `main`
+is built, tested and deployed automatically by `.github/workflows/deploy-azure.yml`.
+
+1. **Create the Web App** (portal → *Create a resource* → *Web App*): publish **Code**, runtime **.NET 8 (LTS)**,
+   operating system **Linux**, region near your customers, pricing plan **Basic B1** (Free F1 works for a quick trial but
+   sleeps when idle, so the first reply after a quiet period is slow). The app name becomes the URL.
+2. **Configuration → General settings**: **Always On** = On, **Web sockets** = On (the dashboard needs them),
+   **SCM Basic Auth Publishing Credentials** = On (needed for the publish profile). Save.
+3. **Settings**: on your PC, run
+   `powershell -ExecutionPolicy Bypass -File scripts\export-appsettings.ps1 -AppUrl https://<app>.azurewebsites.net`.
+   It copies every user-secret to the clipboard in Azure's format. In the portal: *Environment variables* →
+   *Advanced edit* → select all, paste, **OK** → **Apply**. Check that `Admin__Password` is there and strong.
+   Data (database, voice clips, Outlook sign-in) is stored in `/home/data` automatically, so nothing else is needed.
+4. **Connect GitHub**: portal *Overview* → **Download publish profile**. On GitHub: repository → *Settings* →
+   *Secrets and variables* → *Actions*:
+   - *Secrets* → **New repository secret** `AZURE_WEBAPP_PUBLISH_PROFILE` = the whole content of the downloaded file;
+   - *Variables* → **New repository variable** `AZURE_WEBAPP_NAME` = the app name.
+5. **Deploy**: GitHub → *Actions* → **Deploy to Azure** → **Run workflow** (later pushes to `main` deploy by themselves).
+   When it is green, open `https://<app>.azurewebsites.net/health` → `{"status":"ok"}`.
+6. **Dashboard**: sign in. The database is new, so fill in **Settings** again (business description, time zone,
+   hours). For a personal Outlook calendar, the dashboard shows a sign-in code once: open microsoft.com/link and enter it.
+7. **Move the webhooks** from the dev tunnel to Azure (same verify token):
+   - WhatsApp: Meta app → WhatsApp → *Configuration* → callback `https://<app>.azurewebsites.net/webhooks/whatsapp`
+   - Messenger: Meta app → Messenger → *Webhooks* → `…/webhooks/facebook`
+   - Instagram: Meta app → Instagram → *Webhooks* → `…/webhooks/instagram`
+   - App settings → *Privacy policy URL* → `…/privacy`
+8. Keep the app on **one instance** (SQLite and an in-memory queue; see ARCHITECTURE.md for scaling out).
+
+After this, the local app and dev tunnel are only needed for development. Webhooks now reach Azure, so a locally running
+copy no longer receives messages.
 
 ## 10. Configuration reference
 

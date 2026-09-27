@@ -170,6 +170,15 @@ URL: `https://<tunnel-id>-5000.<region>.devtunnels.ms` (use the `-5000` form). S
 *Twilio (alternative WhatsApp provider):* the code is in the project (`Twilio:AccountSid` / `Twilio:AuthToken`), but Twilio signup
 rejected the Pakistani phone numbers. **Leave the Twilio secrets empty**, or the app would switch WhatsApp to Twilio.
 
+### 11. Azure deployment (live 24/7, no terminal)
+
+Follow docs/SETUP.md §9. Summary: Linux Web App (.NET 8, B1) → Always On + Web sockets + SCM Basic Auth on →
+`scripts\export-appsettings.ps1` pastes all secrets into *Environment variables → Advanced edit* → publish profile as the
+GitHub secret `AZURE_WEBAPP_PUBLISH_PROFILE` and app name as the variable `AZURE_WEBAPP_NAME` → run **Deploy to Azure**
+in GitHub Actions → fill Settings and sign in to Outlook on the live dashboard → change the 3 Meta webhook URLs and the
+privacy URL to `https://<app>.azurewebsites.net/...`. Every push to `main` then redeploys automatically.
+Live data is in `/home/data` on the App Service (kept across restarts and deployments).
+
 ---
 
 ## Troubleshooting (every problem hit so far)
@@ -197,6 +206,9 @@ rejected the Pakistani phone numbers. **Leave the Twilio secrets empty**, or the
 | Instagram verify fails, tunnel says "refused" | App wasn't running during verification | Start the app, test `/webhooks/instagram?hub.mode=subscribe&hub.verify_token=…&hub.challenge=12345` in a browser (should print 12345), retry |
 | Meta "Publish" button grey | Needs business verification | Not needed for testing; skip |
 | Dashboard parts cut off / page scrolls sideways | (Fixed in code) layout wasn't responsive | `git pull`, restart, then **Ctrl+F5** in the browser. Wide tables now scroll inside their card; on a phone the menu moves to the top |
+| Azure: GitHub **Deploy to Azure** fails at *webapps-deploy* | Publish profile missing/old, or SCM Basic Auth off | Turn SCM Basic Auth on, download the profile again, update the secret, re-run |
+| Azure: dashboard loads but buttons do nothing | Web sockets off | App Service → Configuration → Web sockets **On** |
+| Azure: app shows an error page after deploy | A setting is missing or mistyped | App Service → *Log stream*; check the names use `__` (e.g. `OpenAI__ApiKey`) |
 | See whether Meta is calling at all | — | Open `https://<tunnel-id>-5000-inspect.<region>.devtunnels.ms` |
 
 ---
@@ -205,5 +217,5 @@ rejected the Pakistani phone numbers. **Leave the Twilio secrets empty**, or the
 
 1. **Demo recording** (docs/ACCEPTANCE-TEST.md shot list): WhatsApp and Messenger live with voice, Outlook event, dashboard,
    and Instagram via Meta's Test delivery.
-2. Optional: deploy to Azure App Service (docs/SETUP.md §9) so it runs without your PC.
+2. Deploy to Azure App Service (step 11 above / docs/SETUP.md §9) so it runs 24/7 without your PC.
 3. Optional later: business verification → publish the Meta app → Instagram DMs from anyone.
