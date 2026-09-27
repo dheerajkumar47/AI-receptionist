@@ -44,6 +44,14 @@ public static class WebhookEndpoints
                 var messages = webhook.ParsePayload(System.Text.Encoding.UTF8.GetString(body));
                 foreach (var m in messages) await queue.EnqueueAsync(m, ct);
                 log.LogInformation("{Channel} webhook: {Count} message(s) queued.", channel, messages.Count);
+                if (messages.Count == 0)
+                {
+                    // Delivery/read receipts and other events carry no customer message; log a short excerpt so
+                    // unexpected payload shapes can be diagnosed.
+                    var text = System.Text.Encoding.UTF8.GetString(body);
+                    log.LogInformation("{Channel} webhook payload without messages: {Payload}", channel,
+                        text.Length > 1500 ? text[..1500] + "…" : text);
+                }
             }
             catch (Exception ex) when (ex is System.Text.Json.JsonException or KeyNotFoundException or InvalidOperationException)
             {
