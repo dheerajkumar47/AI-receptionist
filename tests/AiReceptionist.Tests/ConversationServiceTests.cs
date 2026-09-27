@@ -293,6 +293,17 @@ public class ConversationServiceTests
     }
 
     [Fact]
+    public async Task Untranscribable_voice_note_asks_the_customer_to_type()
+    {
+        await using var h = new TestHarness();
+
+        await h.Service.ProcessInboundAsync(new InboundMessage(Channels.Simulator, "u", null, null, "v9", DateTime.UtcNow,
+            IsVoice: true, AudioReference: "https://cdn.example.com/a.mp4"), CancellationToken.None);
+
+        Assert.Equal("Sorry, I couldn't catch that voice message. Could you type it instead?", h.Channel.Sent.Single().Text);
+    }
+
+    [Fact]
     public async Task Manual_override_reply_is_delivered_and_marked_manual()
     {
         await using var h = new TestHarness();

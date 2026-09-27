@@ -45,7 +45,8 @@ public sealed class SpeechOptions
     /// <summary>Azure region of the Speech resource, e.g. "eastus".</summary>
     public string? Region { get; set; }
 
-    /// <summary>Recognition language for inbound voice notes.</summary>
+    /// <summary>Recognition language(s) for inbound voice notes, comma-separated (e.g. "en-US,ur-IN");
+    /// with several, fast transcription detects which one was spoken.</summary>
     public string RecognitionLanguage { get; set; } = "en-US";
 
     public bool IsConfigured => !string.IsNullOrWhiteSpace(Key) && !string.IsNullOrWhiteSpace(Region);

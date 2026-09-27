@@ -121,7 +121,9 @@ public sealed class ConversationService
         if (string.IsNullOrWhiteSpace(text))
         {
             // Unsupported attachment or a voice note we could not transcribe.
-            decision = new ReplyDecision(settings.HandoffMessage, settings.DefaultReplyMode, "Unreadable", null, NeedsAttention: true);
+            decision = inbound.IsVoice
+                ? new ReplyDecision("Sorry, I couldn't catch that voice message. Could you type it instead?", ReplyMode.Text, "Unreadable", null, NeedsAttention: true)
+                : new ReplyDecision(settings.HandoffMessage, settings.DefaultReplyMode, "Unreadable", null, NeedsAttention: true);
         }
         else
         {

@@ -76,12 +76,52 @@ public sealed class AzureSpeechTranscriber : IAudioTranscriber
 
     public async Task<string?> TranscribeAsync(byte[] audio, string contentType, CancellationToken ct)
     {
-        // The short-audio endpoint accepts WAV (PCM) and OGG/Opus. WhatsApp voice notes are OGG/Opus.
-        var mediaType = contentType.StartsWith("audio/ogg", StringComparison.OrdinalIgnoreCase) ? "audio/ogg; codecs=opus" : contentType;
+        // Fast transcription accepts almost any container (MP4/AAC from Messenger & Instagram, OGG from WhatsApp, MP3...).
+        var text = await FastTranscribeAsync(audio, contentType, ct);
+        if (!string.IsNullOrWhiteSpace(text)) return text;
+
+        // Fallback: the short-audio endpoint only accepts WAV and OGG/Opus.
+        var isOgg = contentType.StartsWith("audio/ogg", StringComparison.OrdinalIgnoreCase);
+        if (!isOgg && !contentType.Contains("wav", StringComparison.OrdinalIgnoreCase)) return null;
+        return await ShortAudioTranscribeAsync(audio, isOgg ? "audio/ogg; codecs=opus" : contentType, ct);
+    }
+
+    private async Task<string?> FastTranscribeAsync(byte[] audio, string contentType, CancellationToken ct)
+    {
+        var locales = _options.RecognitionLanguage.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        using var form = new MultipartFormDataContent();
+        var file = new ByteArrayContent(audio);
+        file.Headers.ContentType = MediaTypeHeaderValue.TryParse(contentType, out var ctHeader) ? ctHeader : new MediaTypeHeaderValue("application/octet-stream");
+        form.Add(file, "audio", "voice" + ExtensionFor(contentType));
+        form.Add(new StringContent(JsonSerializer.Serialize(new { locales })), "definition");
 
         using var request = new HttpRequestMessage(HttpMethod.Post,
+            $"https://{_options.Region}.api.cognitive.microsoft.com/speechtotext/transcriptions:transcribe?api-version=2024-11-15")
+        { Content = form };
+        request.Headers.Add("Ocp-Apim-Subscription-Key", _options.Key);
+
+        using var response = await _http.CreateClient(AzureSpeechSynthesizer.HttpClientName).SendAsync(request, ct);
+        var body = await response.Content.ReadAsStringAsync(ct);
+        if (!response.IsSuccessStatusCode)
+        {
+            _log.LogWarning("Fast transcription returned {Status}: {Body}", (int)response.StatusCode, body);
+            return null;
+        }
+
+        using var doc = JsonDocument.Parse(body);
+        if (!doc.RootElement.TryGetProperty("combinedPhrases", out var phrases) || phrases.ValueKind != JsonValueKind.Array) return null;
+        var text = string.Join(" ", phrases.EnumerateArray()
+            .Select(p => p.TryGetProperty("text", out var t) ? t.GetString() : null)
+            .Where(t => !string.IsNullOrWhiteSpace(t)));
+        return text.Length > 0 ? text : null;
+    }
+
+    private async Task<string?> ShortAudioTranscribeAsync(byte[] audio, string mediaType, CancellationToken ct)
+    {
+        var language = _options.RecognitionLanguage.Split(',')[0].Trim();
+        using var request = new HttpRequestMessage(HttpMethod.Post,
             $"https://{_options.Region}.stt.speech.microsoft.com/speech/recognition/conversation/cognitiveservices/v1" +
-            $"?language={Uri.EscapeDataString(_options.RecognitionLanguage)}&format=simple");
+            $"?language={Uri.EscapeDataString(language)}&format=simple");
         request.Headers.Add("Ocp-Apim-Subscription-Key", _options.Key);
         request.Content = new ByteArrayContent(audio);
         request.Content.Headers.ContentType = MediaTypeHeaderValue.Parse(mediaType);
@@ -98,6 +138,16 @@ public sealed class AzureSpeechTranscriber : IAudioTranscriber
         var status = doc.RootElement.TryGetProperty("RecognitionStatus", out var s) ? s.GetString() : null;
         return status == "Success" && doc.RootElement.TryGetProperty("DisplayText", out var t) ? t.GetString() : null;
     }
+
+    private static string ExtensionFor(string contentType) => contentType.ToLowerInvariant() switch
+    {
+        var c when c.Contains("ogg") => ".ogg",
+        var c when c.Contains("mpeg") || c.Contains("mp3") => ".mp3",
+        var c when c.Contains("wav") => ".wav",
+        var c when c.Contains("aac") => ".aac",
+        var c when c.Contains("webm") => ".webm",
+        _ => ".mp4",
+    };
 }
 
 /// <summary>Writes audio clips to disk; the web host serves them at {PublicBaseUrl}/media/{file}.</summary>

@@ -9,7 +9,7 @@ using Microsoft.Extensions.Options;
 namespace AiReceptionist.Infrastructure.Channels.Meta;
 
 /// <summary>Common plumbing for Meta channels: webhook verification, signature checks and Graph API calls.</summary>
-public abstract class MetaChannelBase : IWebhookChannel
+public abstract class MetaChannelBase : IWebhookChannel, IAudioDownloadChannel
 {
     public const string HttpClientName = "meta-graph";
     private readonly IHttpClientFactory _http;
@@ -53,6 +53,15 @@ public abstract class MetaChannelBase : IWebhookChannel
     }
 
     protected HttpClient Client => _http.CreateClient(HttpClientName);
+
+    /// <summary>Messenger and Instagram voice notes arrive as a public CDN URL (usually MP4/AAC).</summary>
+    public virtual async Task<(byte[] Data, string ContentType)?> DownloadAudioAsync(string audioReference, CancellationToken ct)
+    {
+        if (!Uri.TryCreate(audioReference, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps) return null;
+        using var response = await Client.GetAsync(uri, ct);
+        if (!response.IsSuccessStatusCode) return null;
+        return (await response.Content.ReadAsByteArrayAsync(ct), response.Content.Headers.ContentType?.MediaType ?? "audio/mp4");
+    }
 }
 
 /// <summary>Facebook Page inbox via the Messenger Platform (Send API + "messages" webhook field).</summary>
@@ -109,7 +118,7 @@ public sealed class InstagramChannel : MetaChannelBase
 }
 
 /// <summary>WhatsApp Business via the WhatsApp Cloud API. Voice replies are delivered as OGG/Opus voice notes.</summary>
-public sealed class WhatsAppChannel : MetaChannelBase, IAudioDownloadChannel
+public sealed class WhatsAppChannel : MetaChannelBase
 {
     private readonly FileMediaStore? _media;
 
@@ -176,7 +185,7 @@ public sealed class WhatsAppChannel : MetaChannelBase, IAudioDownloadChannel
     }
 
     /// <summary>Two-step media download: resolve the media id to a short-lived URL, then fetch it with the token.</summary>
-    public async Task<(byte[] Data, string ContentType)?> DownloadAudioAsync(string audioReference, CancellationToken ct)
+    public override async Task<(byte[] Data, string ContentType)?> DownloadAudioAsync(string audioReference, CancellationToken ct)
     {
         using var metaRequest = new HttpRequestMessage(HttpMethod.Get, GraphUrl(audioReference));
         metaRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", AccessToken);

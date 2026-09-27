@@ -515,3 +515,43 @@ public class WhatsAppAudioUploadTests
         Directory.Delete(dir, true);
     }
 }
+
+public class TranscriptionTests
+{
+    private sealed class Stub : HttpMessageHandler
+    {
+        public string? Url;
+        public string? Body;
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
+        {
+            Url = request.RequestUri!.ToString();
+            Body = await request.Content!.ReadAsStringAsync(ct);
+            return new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+            {
+                Content = new StringContent("{\"combinedPhrases\":[{\"text\":\"Can we have a call on Monday?\"}]}"),
+            };
+        }
+    }
+
+    private sealed class Factory : IHttpClientFactory
+    {
+        private readonly HttpMessageHandler _h;
+        public Factory(HttpMessageHandler h) => _h = h;
+        public HttpClient CreateClient(string name) => new(_h, disposeHandler: false);
+    }
+
+    [Fact]
+    public async Task Messenger_mp4_voice_note_is_transcribed_with_fast_transcription()
+    {
+        var stub = new Stub();
+        var transcriber = new AzureSpeechTranscriber(new Factory(stub),
+            Microsoft.Extensions.Options.Options.Create(new AiReceptionist.Infrastructure.SpeechOptions { Key = "k", Region = "eastus", RecognitionLanguage = "en-US,ur-IN" }),
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<AzureSpeechTranscriber>.Instance);
+
+        var text = await transcriber.TranscribeAsync(new byte[] { 1, 2, 3 }, "audio/mp4", default);
+
+        Assert.Equal("Can we have a call on Monday?", text);
+        Assert.Equal("https://eastus.api.cognitive.microsoft.com/speechtotext/transcriptions:transcribe?api-version=2024-11-15", stub.Url);
+        Assert.Contains("\"locales\":[\"en-US\",\"ur-IN\"]", stub.Body);
+    }
+}
