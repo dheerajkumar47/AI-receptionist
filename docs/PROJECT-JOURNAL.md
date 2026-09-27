@@ -206,6 +206,7 @@ Live data is in `/home/data` on the App Service (kept across restarts and deploy
 | Instagram verify fails, tunnel says "refused" | App wasn't running during verification | Start the app, test `/webhooks/instagram?hub.mode=subscribe&hub.verify_token=…&hub.challenge=12345` in a browser (should print 12345), retry |
 | Meta "Publish" button grey | Needs business verification | Not needed for testing; skip |
 | Dashboard parts cut off / page scrolls sideways | (Fixed in code) layout wasn't responsive | `git pull`, restart, then **Ctrl+F5** in the browser. Wide tables now scroll inside their card; on a phone the menu moves to the top |
+| Azure create screen offers .NET 10, Windows, Continuous deployment | Portal defaults | Choose **.NET 8 (LTS)** (the app targets .NET 8), **Linux** (Outlook sign-in storage), and **Disable** continuous deployment (the repo already has its own workflow) |
 | Azure: GitHub **Deploy to Azure** fails at *webapps-deploy* | Publish profile missing/old, or SCM Basic Auth off | Turn SCM Basic Auth on, download the profile again, update the secret, re-run |
 | Azure: dashboard loads but buttons do nothing | Web sockets off | App Service → Configuration → Web sockets **On** |
 | Azure: app shows an error page after deploy | A setting is missing or mistyped | App Service → *Log stream*; check the names use `__` (e.g. `OpenAI__ApiKey`) |
