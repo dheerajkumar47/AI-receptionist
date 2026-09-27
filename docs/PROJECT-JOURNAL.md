@@ -22,7 +22,7 @@ services, never quotes prices, and books a **free 30-minute consultation call**.
 | 7 | Public URL | ✅ | Microsoft Dev Tunnel `ai-receptionist` → `https://<tunnel-id>-5000.<region>.devtunnels.ms` |
 | 8 | WhatsApp | ✅ | Meta WhatsApp Cloud API, test number, app **not published** |
 | 9 | Facebook Messenger | ✅ | Same Meta app, Page "Dheeraj Software Solutions", app **not published** |
-| 10 | Instagram | ⏳ | Same Meta app |
+| 10 | Instagram | ⏳ in progress | Same Meta app, "Instagram API with Instagram Login" (secrets: `Meta:Instagram:AccessToken`, `Meta:Instagram:ApiBaseUrl` = `https://graph.instagram.com`, `Meta:Instagram:AppSecret`) |
 | 11 | X (Twitter) | ⏸ skipped | Needs a paid X API plan |
 | 12 | Deploy to Azure App Service | optional | docs/SETUP.md §9 |
 | 13 | Demo recording | ⏳ | docs/ACCEPTANCE-TEST.md |

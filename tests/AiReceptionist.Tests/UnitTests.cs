@@ -555,3 +555,26 @@ public class TranscriptionTests
         Assert.Contains("\"locales\":[\"en-US\",\"ur-IN\"]", stub.Body);
     }
 }
+
+public class InstagramSecretTests
+{
+    [Fact]
+    public void Instagram_login_webhooks_are_verified_with_the_instagram_app_secret()
+    {
+        var channel = new InstagramChannel(new NoHttp(), Microsoft.Extensions.Options.Options.Create(new AiReceptionist.Infrastructure.MetaOptions
+        {
+            AppSecret = "meta-secret", VerifyToken = "v",
+            Instagram = new AiReceptionist.Infrastructure.InstagramOptions { AccessToken = "t", ApiBaseUrl = "https://graph.instagram.com", AppSecret = "ig-secret" },
+        }));
+        var body = Encoding.UTF8.GetBytes("{\"object\":\"instagram\"}");
+
+        Assert.True(channel.IsConfigured);
+        Assert.True(channel.ValidateSignature(_ => MetaWebhook.Sign(body, "ig-secret"), body));
+        Assert.False(channel.ValidateSignature(_ => MetaWebhook.Sign(body, "meta-secret"), body));
+    }
+
+    private sealed class NoHttp : IHttpClientFactory
+    {
+        public HttpClient CreateClient(string name) => new();
+    }
+}

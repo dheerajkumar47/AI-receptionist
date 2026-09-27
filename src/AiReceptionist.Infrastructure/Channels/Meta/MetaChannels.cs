@@ -28,12 +28,15 @@ public abstract class MetaChannelBase : IWebhookChannel, IAudioDownloadChannel
     protected abstract string? AccessToken { get; }
 
     public virtual bool IsConfigured =>
-        !string.IsNullOrWhiteSpace(AccessToken) && !string.IsNullOrWhiteSpace(Meta.AppSecret) && !string.IsNullOrWhiteSpace(Meta.VerifyToken);
+        !string.IsNullOrWhiteSpace(AccessToken) && !string.IsNullOrWhiteSpace(WebhookSecret) && !string.IsNullOrWhiteSpace(Meta.VerifyToken);
 
     public string? VerifySubscription(IReadOnlyDictionary<string, string?> query) => MetaWebhook.Verify(query, Meta.VerifyToken);
 
     public bool ValidateSignature(Func<string, string?> getHeader, byte[] body) =>
-        MetaWebhook.ValidateSignature(getHeader("X-Hub-Signature-256"), body, Meta.AppSecret);
+        MetaWebhook.ValidateSignature(getHeader("X-Hub-Signature-256"), body, WebhookSecret);
+
+    /// <summary>Secret used to sign this channel's webhooks (the Meta app secret unless a channel overrides it).</summary>
+    protected virtual string? WebhookSecret => Meta.AppSecret;
 
     public abstract IReadOnlyList<InboundMessage> ParsePayload(string json);
 
@@ -102,6 +105,7 @@ public sealed class InstagramChannel : MetaChannelBase
     public override string DisplayName => "Instagram Direct";
     public override ChannelCapabilities Capabilities { get; } = new(SupportsAudio: true, AudioFormat.Mp3, MaxTextLength: 1000);
     protected override string? AccessToken => Meta.Instagram.AccessToken;
+    protected override string? WebhookSecret => string.IsNullOrWhiteSpace(Meta.Instagram.AppSecret) ? Meta.AppSecret : Meta.Instagram.AppSecret;
 
     public override IReadOnlyList<InboundMessage> ParsePayload(string json) => MetaWebhook.ParseMessaging(json, "instagram", ChannelId);
 

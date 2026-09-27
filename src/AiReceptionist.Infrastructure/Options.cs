@@ -149,6 +149,10 @@ public sealed class InstagramOptions
     /// <summary>Leave empty to use Meta:GraphBaseUrl (Messenger API for Instagram). Set to https://graph.instagram.com
     /// for "Instagram API with Instagram Login".</summary>
     public string? ApiBaseUrl { get; set; }
+
+    /// <summary>"Instagram API with Instagram Login" signs webhooks with the separate *Instagram app secret*.
+    /// Leave empty to use Meta:AppSecret.</summary>
+    public string? AppSecret { get; set; }
 }
 
 public sealed class WhatsAppOptions
