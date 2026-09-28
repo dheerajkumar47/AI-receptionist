@@ -64,6 +64,14 @@ public sealed class TestHarness : IAsyncDisposable
 
     public ReceptionistDbContext Db() => DbFactory.CreateDbContext();
 
+    public Task RunScheduledAsync() => Service.RunScheduledMessagesAsync(CancellationToken.None);
+
+    /// <summary>Moves the clock to <paramref name="utc"/> (never backwards).</summary>
+    public void SetNow(DateTime utc) => Time.SetUtcNow(new DateTimeOffset(utc, TimeSpan.Zero));
+
+    /// <summary>Opening connection for tests that need raw SQL.</summary>
+    public SqliteConnection Connection => _connection;
+
     public async ValueTask DisposeAsync() => await _connection.DisposeAsync();
 }
 
@@ -85,13 +93,17 @@ public sealed class FakeChannel : IChannelConnector
     public string ChannelId { get; }
     public string DisplayName => ChannelId;
     public bool IsConfigured => true;
-    public ChannelCapabilities Capabilities { get; }
+    public ChannelCapabilities Capabilities { get; set; }
     public List<OutboundMessage> Sent { get; } = new();
     public bool Fail { get; set; }
+
+    /// <summary>Behave like Instagram: refuse anything outside the reply window.</summary>
+    public bool RejectOutsideWindow { get; set; }
 
     public Task<SendResult> SendAsync(OutboundMessage message, CancellationToken ct)
     {
         if (Fail) return Task.FromResult(SendResult.Fail("boom"));
+        if (RejectOutsideWindow && message.Hint?.OutsideReplyWindow == true) return Task.FromResult(SendResult.Fail("outside window"));
         Sent.Add(message);
         return Task.FromResult(SendResult.Ok($"out-{Guid.NewGuid():N}"));
     }

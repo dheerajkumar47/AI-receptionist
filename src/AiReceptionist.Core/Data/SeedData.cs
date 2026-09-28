@@ -7,14 +7,19 @@ namespace AiReceptionist.Core.Data;
 /// Everything seeded here can be changed from the dashboard afterwards.</summary>
 public static class SeedData
 {
+    /// <summary>Bump when a release adds defaults that existing databases should receive (see <see cref="UpgradeDefaults"/>).</summary>
+    public const int CurrentSeedVersion = 2;
+
     public static async Task InitializeAsync(ReceptionistDbContext db, CancellationToken ct = default)
     {
-        await db.Database.EnsureCreatedAsync(ct);
+        if (!await db.Database.EnsureCreatedAsync(ct))
+            await SchemaUpgrader.AddMissingColumnsAsync(db, ct);
 
         if (!await db.Settings.AnyAsync(ct))
         {
             db.Settings.Add(new BotSettings
             {
+                SeedVersion = CurrentSeedVersion,
                 BusinessName = "Contoso Clinic",
                 BusinessDescription = "A friendly wellness clinic offering 30-minute consultations. Located at 1 Main Street. Parking available.",
                 SystemPrompt =
@@ -52,7 +57,33 @@ public static class SeedData
         }
 
         await db.SaveChangesAsync(ct);
+        await UpgradeDefaults(db, ct);
     }
+
+    /// <summary>One-time additions for databases created by an earlier version. Anything added here can still be
+    /// edited or deleted from the dashboard; it is never re-added afterwards.</summary>
+    private static async Task UpgradeDefaults(ReceptionistDbContext db, CancellationToken ct)
+    {
+        var settings = await db.Settings.OrderBy(s => s.Id).FirstAsync(ct);
+        if (settings.SeedVersion >= CurrentSeedVersion) return;
+
+        if (settings.SeedVersion < 2 && !await db.Intents.AnyAsync(i => i.Name == ConfirmLaterIntent.Name, ct))
+        {
+            db.Intents.Add(ConfirmLaterIntent);
+        }
+
+        settings.SeedVersion = CurrentSeedVersion;
+        await db.SaveChangesAsync(ct);
+    }
+
+    private static IntentDefinition ConfirmLaterIntent => new()
+    {
+        Name = "ConfirmLater", SortOrder = 8, Action = IntentAction.Reply, ReplyMode = ReplyMode.Text,
+        Description = "The person needs time before confirming the offered slot (will check and confirm later).",
+        Examples = "wait\nlet me check and confirm\nI'll confirm later\nI will let you know\ngive me some time\nlet me check my schedule\nI'll get back to you\nmaybe later",
+        Guidance = "Say there is no rush and that they can simply reply here when they are ready. Do not book anything and do not claim the slot is reserved.",
+        TemplateReply = "No problem, take your time! Just reply here whenever you're ready and I'll book it for you.",
+    };
 
     /// <summary>Recommended intents for a software / IT services business offering free consultation calls.
     /// Also used by the dashboard's "Restore recommended intents" button.</summary>
@@ -110,6 +141,7 @@ public static class SeedData
             Examples = "can I speak to a human\ncan I talk to a real person\nI have a problem with my project\nthis is not working\nI want to make a complaint",
             TemplateReply = "I've passed your message to our team and someone will reply to you personally very soon.",
         },
+        ConfirmLaterIntent,
         new IntentDefinition
         {
             Name = "Other", SortOrder = 99, Action = IntentAction.Reply, ReplyMode = ReplyMode.Text,

@@ -37,6 +37,7 @@ builder.Services.AddAiReceptionist(builder.Configuration);
 builder.Services.AddHostedService<InboundProcessingWorker>();
 builder.Services.AddHostedService<ChannelPollingWorker>();
 builder.Services.AddHostedService<CalendarSignInWorker>();
+builder.Services.AddHostedService<ScheduledMessagesWorker>();
 
 builder.Services.AddRazorComponents().AddInteractiveServerComponents();
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)

@@ -127,3 +127,33 @@ public sealed class CalendarSignInWorker : BackgroundService
         }
     }
 }
+
+/// <summary>Once a minute: follow-ups on unconfirmed offers and reminders before booked appointments.</summary>
+public sealed class ScheduledMessagesWorker : BackgroundService
+{
+    private readonly ConversationService _conversations;
+    private readonly ILogger<ScheduledMessagesWorker> _log;
+
+    public ScheduledMessagesWorker(ConversationService conversations, ILogger<ScheduledMessagesWorker> log)
+    {
+        _conversations = conversations;
+        _log = log;
+    }
+
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        using var timer = new PeriodicTimer(TimeSpan.FromMinutes(1));
+        do
+        {
+            try
+            {
+                await _conversations.RunScheduledMessagesAsync(stoppingToken);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _log.LogError(ex, "Sending scheduled follow-ups and reminders failed.");
+            }
+        }
+        while (await timer.WaitForNextTickAsync(stoppingToken));
+    }
+}

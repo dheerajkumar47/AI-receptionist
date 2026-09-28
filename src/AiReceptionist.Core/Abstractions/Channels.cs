@@ -20,7 +20,23 @@ public sealed record InboundMessage(
     string? AudioReference = null);
 
 /// <summary>A reply to deliver. Either or both of <see cref="Text"/> and <see cref="AudioUrl"/> are set.</summary>
-public sealed record OutboundMessage(string Channel, string RecipientId, string? Text, string? AudioUrl = null);
+/// <param name="Hint">Set for automated messages (follow-ups, reminders) so the channel can respect platform rules.</param>
+public sealed record OutboundMessage(string Channel, string RecipientId, string? Text, string? AudioUrl = null, DeliveryHint? Hint = null);
+
+/// <summary>
+/// Context for messages the business starts itself. Meta platforms only allow free-form messages within 24 hours of the
+/// customer's last message; outside it Messenger accepts the CONFIRMED_EVENT_UPDATE tag for appointment reminders and
+/// WhatsApp needs a pre-approved template. Instagram has no equivalent, so the channel reports a failure.
+/// </summary>
+/// <param name="OutsideReplyWindow">The customer's last message is older than the channel's <see cref="ChannelCapabilities.ReplyWindow"/>.</param>
+/// <param name="IsAppointmentReminder">The message is a reminder about a booked appointment.</param>
+/// <param name="TemplateName">WhatsApp template to use outside the window (with <paramref name="TemplateParameters"/> as body variables).</param>
+public sealed record DeliveryHint(
+    bool OutsideReplyWindow,
+    bool IsAppointmentReminder = false,
+    string? TemplateName = null,
+    string TemplateLanguage = "en",
+    IReadOnlyList<string>? TemplateParameters = null);
 
 public sealed record SendResult(bool Success, string? ExternalId = null, string? Error = null)
 {
@@ -37,7 +53,8 @@ public enum AudioFormat
 /// <param name="SupportsAudio">Channel can deliver an audio attachment. If false, voice replies degrade to text plus a link.</param>
 /// <param name="PreferredAudioFormat">Format synthesized for this channel (WhatsApp shows OGG/Opus as a native voice note).</param>
 /// <param name="MaxTextLength">Platform limit; longer replies are truncated.</param>
-public sealed record ChannelCapabilities(bool SupportsAudio, AudioFormat PreferredAudioFormat, int MaxTextLength);
+/// <param name="ReplyWindow">How long after the customer's last message free-form messages are allowed (null = no limit).</param>
+public sealed record ChannelCapabilities(bool SupportsAudio, AudioFormat PreferredAudioFormat, int MaxTextLength, TimeSpan? ReplyWindow = null);
 
 /// <summary>
 /// Outbound side of a social channel. Every channel implements this; to receive messages it also

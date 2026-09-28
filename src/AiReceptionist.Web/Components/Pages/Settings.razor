@@ -59,6 +59,38 @@
     </section>
 
     <section class="card">
+        <h2>Follow-ups &amp; reminders</h2>
+        <p class="small muted">
+            Follow-ups go to customers who were offered a time but haven't confirmed (for example "let me check and confirm").
+            WhatsApp, Messenger and Instagram only allow messages within 24 hours of the customer's last message, so keep both
+            follow-ups under 1440 minutes. Not sent while <em>Require approval</em> is on.
+        </p>
+        <div class="form-grid">
+            <label class="check"><input type="checkbox" @bind="_s.FollowUpsEnabled" /> Follow up on unconfirmed offers</label>
+            <label>1st follow-up after (minutes)<input type="number" min="5" max="1435" @bind="_s.FollowUp1Minutes" /></label>
+            <label>2nd follow-up after (minutes)<input type="number" min="0" max="1435" @bind="_s.FollowUp2Minutes" /></label>
+        </div>
+        <div class="form-grid-2">
+            <label>1st follow-up <span class="small muted">{name} {slot} {business}</span><textarea rows="2" @bind="_s.FollowUp1Message"></textarea></label>
+            <label>2nd follow-up <span class="small muted">(0 minutes = don't send)</span><textarea rows="2" @bind="_s.FollowUp2Message"></textarea></label>
+        </div>
+        <div class="form-grid">
+            <label class="check"><input type="checkbox" @bind="_s.RemindersEnabled" /> Remind customers before appointments</label>
+            <label>Minutes before<input type="number" min="1" max="1440" @bind="_s.ReminderMinutesBefore" /></label>
+        </div>
+        <label>Reminder message <span class="small muted">{name} {slot} {minutes} {business}</span><textarea rows="2" @bind="_s.ReminderMessage"></textarea></label>
+        <p class="small muted">
+            If the reminder falls more than 24 hours after the customer's last message: Messenger sends it as an appointment
+            update, WhatsApp needs an approved template (below), Instagram can't, and the customer is emailed instead when their
+            email is known.
+        </p>
+        <div class="form-grid">
+            <label>WhatsApp reminder template <span class="small muted">(optional)</span><input placeholder="appointment_reminder" @bind="_s.WhatsAppReminderTemplate" /></label>
+            <label>Template language<input placeholder="en" @bind="_s.WhatsAppTemplateLanguage" /></label>
+        </div>
+    </section>
+
+    <section class="card">
         <h2>Voice</h2>
         <div class="row">
             <label class="grow">Azure neural voice <span class="small muted">e.g. en-US-AvaMultilingualNeural, en-GB-SoniaNeural, en-IN-NeerjaNeural</span><input @bind="_s.VoiceName" /></label>
@@ -121,6 +153,10 @@
         if (!BusinessHours.TryParse(_s!.BusinessHours, out _, out var hoursError)) { Show("Opening hours: " + hoursError, true); return; }
         if (!TimeZoneResolver.IsKnown(_s.TimeZoneId)) { Show($"Unknown time zone '{_s.TimeZoneId}'.", true); return; }
         if (_s.AppointmentMinutes < 5 || _s.BookingHorizonDays < 1) { Show("Appointment length must be ≥ 5 minutes and horizon ≥ 1 day.", true); return; }
+        if (_s.FollowUp1Minutes is < 5 or > 1435 || _s.FollowUp2Minutes is < 0 or > 1435 ||
+            (_s.FollowUp2Minutes > 0 && _s.FollowUp2Minutes <= _s.FollowUp1Minutes))
+        { Show("Follow-ups: 1st between 5 and 1435 minutes, 2nd later than the 1st (max 1435) or 0 to skip it.", true); return; }
+        if (_s.ReminderMinutesBefore is < 1 or > 1440) { Show("Reminder: between 1 and 1440 minutes before.", true); return; }
 
         await using var db = await DbFactory.CreateDbContextAsync();
         db.Settings.Update(_s);

@@ -20,7 +20,7 @@ namespace AiReceptionist.Core.Conversations;
 /// </list>
 /// It is also the API the dashboard uses for manual overrides.
 /// </summary>
-public sealed class ConversationService
+public sealed partial class ConversationService
 {
     private readonly IDbContextFactory<ReceptionistDbContext> _dbFactory;
     private readonly IIntentEngine _engine;
@@ -95,6 +95,7 @@ public sealed class ConversationService
         };
         db.Messages.Add(message);
         conversation.LastActivityUtc = Now;
+        conversation.FollowUpsSent = 0;
 
         try
         {
@@ -384,7 +385,8 @@ public sealed class ConversationService
 
     /// <summary>Sends <paramref name="text"/> to the customer as text and/or voice and records the outbound message.</summary>
     private async Task<Message> DeliverAsync(ReceptionistDbContext db, BotSettings settings, Conversation conversation, string text,
-        ReplyMode mode, string? intent, double? confidence, bool isManual, Message? existing, CancellationToken ct)
+        ReplyMode mode, string? intent, double? confidence, bool isManual, Message? existing, CancellationToken ct,
+        DeliveryHint? hint = null)
     {
         var message = existing ?? new Message
         {
@@ -444,13 +446,13 @@ public sealed class ConversationService
         string? externalId = null;
         if (sendText)
         {
-            var r = await SafeSendAsync(channel, new OutboundMessage(channel.ChannelId, conversation.Contact.ExternalUserId, textToSend, null), ct);
+            var r = await SafeSendAsync(channel, new OutboundMessage(channel.ChannelId, conversation.Contact.ExternalUserId, textToSend, null, hint), ct);
             externalId ??= r.ExternalId;
             if (!r.Success) errors.Add("Text: " + r.Error);
         }
         if (sendAudioNatively)
         {
-            var r = await SafeSendAsync(channel, new OutboundMessage(channel.ChannelId, conversation.Contact.ExternalUserId, null, audioUrl), ct);
+            var r = await SafeSendAsync(channel, new OutboundMessage(channel.ChannelId, conversation.Contact.ExternalUserId, null, audioUrl, hint), ct);
             externalId ??= r.ExternalId;
             if (!r.Success) errors.Add("Audio: " + r.Error);
         }

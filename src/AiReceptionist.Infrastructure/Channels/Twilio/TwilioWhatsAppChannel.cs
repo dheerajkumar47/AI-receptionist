@@ -32,7 +32,7 @@ public sealed class TwilioWhatsAppChannel : IWebhookChannel, IAudioDownloadChann
     public string ChannelId => ChannelIds.WhatsApp;
     public string DisplayName => "WhatsApp (via Twilio)";
     public bool IsConfigured => _options.IsConfigured;
-    public ChannelCapabilities Capabilities { get; } = new(SupportsAudio: true, AudioFormat.OggOpus, MaxTextLength: 1600);
+    public ChannelCapabilities Capabilities { get; } = new(SupportsAudio: true, AudioFormat.OggOpus, MaxTextLength: 1600, ReplyWindow: TimeSpan.FromHours(24));
 
     /// <summary>Twilio has no subscription handshake.</summary>
     public string? VerifySubscription(IReadOnlyDictionary<string, string?> query) => null;
@@ -69,6 +69,9 @@ public sealed class TwilioWhatsAppChannel : IWebhookChannel, IAudioDownloadChann
 
     public async Task<SendResult> SendAsync(OutboundMessage message, CancellationToken ct)
     {
+        if (message.Hint?.OutsideReplyWindow == true)
+            return SendResult.Fail("WhatsApp (Twilio) only allows free-form messages within 24 hours of the customer's last message.");
+
         var fields = new List<KeyValuePair<string, string>>
         {
             new("From", NormalizeWhatsApp(_options.WhatsAppFrom)),

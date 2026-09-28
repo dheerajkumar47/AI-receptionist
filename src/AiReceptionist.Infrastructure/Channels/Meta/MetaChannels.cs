@@ -48,7 +48,7 @@ public abstract class MetaChannelBase : IWebhookChannel, IAudioDownloadChannel
     /// <summary>POSTs JSON with a bearer token (keeps tokens out of URLs and logs) and returns the parsed response.</summary>
     protected async Task<(bool Ok, JsonDocument? Body, string? Error)> PostJsonAsync(string url, object payload, CancellationToken ct)
     {
-        using var request = new HttpRequestMessage(HttpMethod.Post, url) { Content = JsonContent.Create(payload) };
+        using var request = new HttpRequestMessage(HttpMethod.Post, url) { Content = JsonContent.Create(payload, options: JsonOptions) };
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", AccessToken);
         using var response = await Client.SendAsync(request, ct);
         if (!response.IsSuccessStatusCode) return (false, null, await MetaWebhook.ReadErrorAsync(response, ct));
@@ -56,6 +56,12 @@ public abstract class MetaChannelBase : IWebhookChannel, IAudioDownloadChannel
     }
 
     protected HttpClient Client => _http.CreateClient(HttpClientName);
+
+    // Optional fields (e.g. Messenger's "tag") are left out rather than sent as null.
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
+    {
+        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
+    };
 
     /// <summary>Messenger and Instagram voice notes arrive as a public CDN URL (usually MP4/AAC).</summary>
     public virtual async Task<(byte[] Data, string ContentType)?> DownloadAudioAsync(string audioReference, CancellationToken ct)
@@ -74,21 +80,29 @@ public sealed class FacebookMessengerChannel : MetaChannelBase
 
     public override string ChannelId => ChannelIds.Facebook;
     public override string DisplayName => "Facebook Messenger";
-    public override ChannelCapabilities Capabilities { get; } = new(SupportsAudio: true, AudioFormat.Mp3, MaxTextLength: 2000);
+    public override ChannelCapabilities Capabilities { get; } = new(SupportsAudio: true, AudioFormat.Mp3, MaxTextLength: 2000, ReplyWindow: TimeSpan.FromHours(24));
     protected override string? AccessToken => Meta.Facebook.PageAccessToken;
 
     public override IReadOnlyList<InboundMessage> ParsePayload(string json) => MetaWebhook.ParseMessaging(json, "page", ChannelId);
 
     public override async Task<SendResult> SendAsync(OutboundMessage message, CancellationToken ct)
     {
+        // Outside the 24-hour window only tagged messages are allowed; CONFIRMED_EVENT_UPDATE covers appointment reminders.
+        var outside = message.Hint?.OutsideReplyWindow == true;
+        if (outside && message.Hint!.IsAppointmentReminder != true)
+            return SendResult.Fail("Messenger only allows this message within 24 hours of the customer's last message.");
+        var type = outside ? "MESSAGE_TAG" : "RESPONSE";
+        var tag = outside ? "CONFIRMED_EVENT_UPDATE" : null;
+
         object body = message.AudioUrl is not null
             ? new
             {
                 recipient = new { id = message.RecipientId },
-                messaging_type = "RESPONSE",
+                messaging_type = type,
+                tag,
                 message = new { attachment = new { type = "audio", payload = new { url = message.AudioUrl, is_reusable = false } } },
             }
-            : new { recipient = new { id = message.RecipientId }, messaging_type = "RESPONSE", message = new { text = message.Text } };
+            : new { recipient = new { id = message.RecipientId }, messaging_type = type, tag, message = new { text = message.Text } };
 
         var (ok, doc, error) = await PostJsonAsync(GraphUrl("me/messages"), body, ct);
         using (doc)
@@ -103,7 +117,7 @@ public sealed class InstagramChannel : MetaChannelBase
 
     public override string ChannelId => ChannelIds.Instagram;
     public override string DisplayName => "Instagram Direct";
-    public override ChannelCapabilities Capabilities { get; } = new(SupportsAudio: true, AudioFormat.Mp3, MaxTextLength: 1000);
+    public override ChannelCapabilities Capabilities { get; } = new(SupportsAudio: true, AudioFormat.Mp3, MaxTextLength: 1000, ReplyWindow: TimeSpan.FromHours(24));
     protected override string? AccessToken => Meta.Instagram.AccessToken;
     protected override string? WebhookSecret => string.IsNullOrWhiteSpace(Meta.Instagram.AppSecret) ? Meta.AppSecret : Meta.Instagram.AppSecret;
 
@@ -111,6 +125,9 @@ public sealed class InstagramChannel : MetaChannelBase
 
     public override async Task<SendResult> SendAsync(OutboundMessage message, CancellationToken ct)
     {
+        if (message.Hint?.OutsideReplyWindow == true)
+            return SendResult.Fail("Instagram only allows messages within 24 hours of the customer's last message.");
+
         object body = message.AudioUrl is not null
             ? new { recipient = new { id = message.RecipientId }, message = new { attachment = new { type = "audio", payload = new { url = message.AudioUrl } } } }
             : new { recipient = new { id = message.RecipientId }, message = new { text = message.Text } };
@@ -131,7 +148,7 @@ public sealed class WhatsAppChannel : MetaChannelBase
 
     public override string ChannelId => ChannelIds.WhatsApp;
     public override string DisplayName => "WhatsApp Business";
-    public override ChannelCapabilities Capabilities { get; } = new(SupportsAudio: true, AudioFormat.OggOpus, MaxTextLength: 4096);
+    public override ChannelCapabilities Capabilities { get; } = new(SupportsAudio: true, AudioFormat.OggOpus, MaxTextLength: 4096, ReplyWindow: TimeSpan.FromHours(24));
     protected override string? AccessToken => Meta.WhatsApp.AccessToken;
 
     public override bool IsConfigured => base.IsConfigured && !string.IsNullOrWhiteSpace(Meta.WhatsApp.PhoneNumberId);
@@ -141,7 +158,27 @@ public sealed class WhatsAppChannel : MetaChannelBase
     public override async Task<SendResult> SendAsync(OutboundMessage message, CancellationToken ct)
     {
         object body;
-        if (message.AudioUrl is not null)
+        if (message.Hint is { OutsideReplyWindow: true } hint)
+        {
+            // Free-form messages are rejected after 24 hours; only approved templates can be sent.
+            if (string.IsNullOrWhiteSpace(hint.TemplateName))
+                return SendResult.Fail("WhatsApp needs an approved template outside the 24-hour window (Settings → WhatsApp reminder template).");
+            body = new
+            {
+                messaging_product = "whatsapp",
+                to = message.RecipientId,
+                type = "template",
+                template = new
+                {
+                    name = hint.TemplateName,
+                    language = new { code = hint.TemplateLanguage },
+                    components = hint.TemplateParameters is { Count: > 0 } p
+                        ? new object[] { new { type = "body", parameters = p.Select(v => new { type = "text", text = v }).ToArray() } }
+                        : Array.Empty<object>(),
+                },
+            };
+        }
+        else if (message.AudioUrl is not null)
         {
             // Prefer uploading the clip to WhatsApp and sending it by media id: WhatsApp's media fetcher is strict about
             // links (tunnels, interstitial pages, content types), while an upload always works.

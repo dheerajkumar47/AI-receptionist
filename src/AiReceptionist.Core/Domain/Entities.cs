@@ -39,6 +39,9 @@ public class Conversation
     /// <summary>Set when a human should look at the thread (handoff, draft, errors, low confidence).</summary>
     public bool NeedsAttention { get; set; }
 
+    /// <summary>Automatic follow-ups sent since the customer's last message (reset when they write again).</summary>
+    public int FollowUpsSent { get; set; }
+
     public DateTime CreatedUtc { get; set; }
     public DateTime LastActivityUtc { get; set; }
 
@@ -176,6 +179,40 @@ public class BotSettings
 
     /// <summary>How many previous messages are sent to the LLM as context.</summary>
     public int HistoryMessages { get; set; } = 12;
+
+    /// <summary>Follow up when a slot was offered but the customer went quiet (e.g. "I'll confirm later").</summary>
+    public bool FollowUpsEnabled { get; set; } = true;
+
+    /// <summary>Minutes after the customer's last message. Meta only allows free-form messages within 24 hours of it,
+    /// so both must stay below 1440.</summary>
+    public int FollowUp1Minutes { get; set; } = 60;
+
+    public int FollowUp2Minutes { get; set; } = 1380;
+
+    /// <summary>Placeholders: {name}, {slot}, {business}.</summary>
+    public string FollowUp1Message { get; set; } =
+        "Hi {name}, just checking in. Shall I book your free consultation for {slot}? Reply YES to confirm, or tell me a time that suits you better.";
+
+    public string FollowUp2Message { get; set; } =
+        "Hi {name}, {slot} is still available for your free consultation. Would you like me to book it? You can reply here any time.";
+
+    /// <summary>Remind the customer shortly before a booked appointment.</summary>
+    public bool RemindersEnabled { get; set; } = true;
+
+    public int ReminderMinutesBefore { get; set; } = 15;
+
+    /// <summary>Placeholders: {name}, {slot}, {minutes}, {business}.</summary>
+    public string ReminderMessage { get; set; } =
+        "Hi {name}, a quick reminder: your appointment with {business} starts in {minutes} minutes ({slot}). Talk soon!";
+
+    /// <summary>Approved WhatsApp template used when the reminder falls outside WhatsApp's 24-hour window
+    /// (body parameters: {{1}} name, {{2}} business, {{3}} time). Empty = email reminder only.</summary>
+    public string? WhatsAppReminderTemplate { get; set; }
+
+    public string WhatsAppTemplateLanguage { get; set; } = "en";
+
+    /// <summary>Version of the built-in defaults already applied to this database (see SeedData).</summary>
+    public int SeedVersion { get; set; }
 }
 
 public class Appointment
@@ -197,6 +234,9 @@ public class Appointment
     public string? WebLink { get; set; }
     public string? Error { get; set; }
     public DateTime CreatedUtc { get; set; }
+
+    /// <summary>When the pre-appointment reminder was sent (or attempted).</summary>
+    public DateTime? ReminderSentUtc { get; set; }
 }
 
 /// <summary>Polling position for channels that are polled rather than pushed (e.g. X/Twitter DMs).</summary>

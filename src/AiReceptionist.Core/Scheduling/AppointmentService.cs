@@ -123,6 +123,25 @@ public sealed class AppointmentService
         }
     }
 
+    /// <summary>Emails the appointment reminder to the customer, used when the chat platform can't deliver it.
+    /// Returns null on success, otherwise the reason it was not sent.</summary>
+    public async Task<string?> SendReminderEmailAsync(Appointment appointment, string text, string businessName, CancellationToken ct)
+    {
+        if (!IsCustomerAddress(appointment.CustomerEmail)) return "No reminder email: the customer's email is unknown.";
+        if (!_email.IsConfigured) return "No reminder email: email (SMTP) is not configured.";
+        try
+        {
+            await _email.SendAsync(new EmailMessage(new[] { appointment.CustomerEmail! },
+                $"Reminder: your appointment with {businessName}", text + "\n"), ct);
+            return null;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _log.LogWarning(ex, "Reminder email failed.");
+            return "Reminder email failed: " + ex.Message;
+        }
+    }
+
     /// <summary>
     /// Sends the customer a short confirmation (no internal notes or chat transcript) with an .ics file.
     /// Returns an error note for the dashboard if it could not be sent; a failure never undoes the booking.
