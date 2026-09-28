@@ -71,8 +71,9 @@ public sealed class GraphCalendarOptions
     /// <summary>UPN or object id of the mailbox whose calendar receives appointments, e.g. owner@contoso.com.</summary>
     public string? CalendarUser { get; set; }
 
-    /// <summary>Send Outlook invitations to the customer when their email is known.</summary>
-    public bool InviteCustomer { get; set; } = true;
+    /// <summary>Also add the customer as an Outlook attendee. Off by default: the event body holds internal notes (chat
+    /// transcript), and customers already get a clean confirmation email with an .ics file.</summary>
+    public bool InviteCustomer { get; set; }
 
     /// <summary>"App" (Microsoft 365 business tenant, client secret) or "Personal" (Outlook.com / any Microsoft
     /// account, one-time device-code sign-in; only ClientId is required).</summary>

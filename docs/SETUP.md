@@ -173,8 +173,10 @@ The app writes events with **Microsoft Graph** using an Entra ID app registratio
    Existing meetings are now excluded from the offered slots.
 
 Events are created with category *AI Receptionist*, a 15-minute reminder, a transcript of the conversation in the body,
-and a Graph `transactionId` so retries never create duplicates. If the customer shared an email address,
-they are added as an attendee and receive an Outlook invitation. Turn this off with `Microsoft365:InviteCustomer=false`.
+and a Graph `transactionId` so retries never create duplicates. If the customer shared an email address, they receive a
+confirmation email (sent through the SMTP settings in section 6) with an `appointment.ics` file, and a cancellation email if
+the booking is cancelled. These emails contain no internal notes. `Microsoft365:InviteCustomer=true` additionally adds
+the customer as an Outlook attendee, but then they also see the event body, including the chat transcript.
 
 ## 6. Email fallback (SMTP)
 

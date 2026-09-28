@@ -12,4 +12,4 @@ setup step is completed or a new problem is fixed. Never write secrets into it.
 - Build and test: `dotnet build`, `dotnet test`. Keep all tests passing.
 - Layout: `src/AiReceptionist.Core` (domain, orchestrator, scheduling), `src/AiReceptionist.Infrastructure`
   (OpenAI, Speech, Graph, SMTP, channel connectors), `src/AiReceptionist.Web` (host, webhooks, dashboard), `tests/`.
-- Docs: docs/SETUP.md (setup), docs/ARCHITECTURE.md (design), docs/ACCEPTANCE-TEST.md (test and demo script).
+- Docs: docs/CLIENT-ONBOARDING.md (setting up a client), docs/SETUP.md (setup), docs/ARCHITECTURE.md (design), docs/ACCEPTANCE-TEST.md (test and demo script).

@@ -74,7 +74,8 @@ public sealed record BookingRequest(
     string? CustomerName,
     string? CustomerEmail,
     string TimeZoneId,
-    string IdempotencyKey);
+    string IdempotencyKey,
+    string? BusinessName = null);
 
 public sealed record CalendarEventResult(string EventId, string? WebLink);
 

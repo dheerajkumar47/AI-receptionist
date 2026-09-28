@@ -320,7 +320,7 @@ public sealed class ConversationService
 
         var subject = TemplateRenderer.Render(settings.AppointmentSubject, values);
         var request = new BookingRequest(start, end, subject, await BuildBookingBodyAsync(db, conversation, ct),
-            contact.DisplayName, contact.Email, settings.TimeZoneId, $"conv{conversation.Id}-{start:yyyyMMddHHmm}");
+            contact.DisplayName, contact.Email, settings.TimeZoneId, $"conv{conversation.Id}-{start:yyyyMMddHHmm}", settings.BusinessName);
 
         var outcome = await _appointments.BookAsync(request, ct);
 

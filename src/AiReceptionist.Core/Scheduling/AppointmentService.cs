@@ -9,7 +9,8 @@ public sealed record BookingOutcome(AppointmentStatus Status, BookingMethod Meth
 
 /// <summary>
 /// Books appointments in Microsoft 365. If the calendar API is not configured or fails, falls back to
-/// emailing a confirmation (with an .ics attachment) to the business owner and, if known, the customer.
+/// emailing the business owner (with the chat summary and an .ics attachment).
+/// Either way the customer, if they gave an email, receives a clean confirmation email with an .ics attachment.
 /// </summary>
 public sealed class AppointmentService
 {
@@ -35,7 +36,8 @@ public sealed class AppointmentService
             {
                 var created = await _calendar.CreateEventAsync(request, ct);
                 _log.LogInformation("Created calendar event {EventId} at {Start:o}", created.EventId, request.StartUtc);
-                return new BookingOutcome(AppointmentStatus.Booked, BookingMethod.Calendar, created.EventId, created.WebLink, null);
+                var notifyError = await TryConfirmToCustomerAsync(request, ct);
+                return new BookingOutcome(AppointmentStatus.Booked, BookingMethod.Calendar, created.EventId, created.WebLink, notifyError);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -54,7 +56,7 @@ public sealed class AppointmentService
         try
         {
             var tz = TimeZoneResolver.Resolve(request.TimeZoneId);
-            var ics = IcsBuilder.Build(request.IdempotencyKey + "@ai-receptionist", request.StartUtc, request.EndUtc,
+            var ics = IcsBuilder.Build(Uid(request.IdempotencyKey), request.StartUtc, request.EndUtc,
                 request.Subject, request.Body, _email.OwnerAddress, request.CustomerEmail, _time.GetUtcNow().UtcDateTime);
 
             var body = new StringBuilder()
@@ -66,10 +68,13 @@ public sealed class AppointmentService
                 .AppendLine("The calendar could not be updated automatically, so this email was sent instead. Open the attached .ics file to add the appointment to your calendar.")
                 .ToString();
 
-            await _email.SendAsync(new EmailMessage(Recipients(request.CustomerEmail), request.Subject, body,
-                new[] { new EmailAttachment("appointment.ics", "text/calendar", Encoding.UTF8.GetBytes(ics)) }), ct);
+            if (OwnerOnly().Count > 0)
+                await _email.SendAsync(new EmailMessage(OwnerOnly(), request.Subject, body,
+                    new[] { new EmailAttachment("appointment.ics", "text/calendar", Encoding.UTF8.GetBytes(ics)) }), ct);
 
-            return new BookingOutcome(AppointmentStatus.EmailFallback, BookingMethod.Email, null, null, calendarError);
+            var notifyError = await TryConfirmToCustomerAsync(request, ct);
+            return new BookingOutcome(AppointmentStatus.EmailFallback, BookingMethod.Email, null, null,
+                notifyError is null ? calendarError : calendarError + " " + notifyError);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -83,25 +88,33 @@ public sealed class AppointmentService
     {
         try
         {
+            var removedFromCalendar = false;
             if (appointment.Method == BookingMethod.Calendar && appointment.ExternalEventId is not null && _calendar.IsConfigured)
             {
                 await _calendar.CancelEventAsync(appointment.ExternalEventId, ct);
-                return null;
+                removedFromCalendar = true;
             }
 
-            if (_email.IsConfigured)
-            {
-                var tz = TimeZoneResolver.Resolve(timeZoneId);
-                var ics = IcsBuilder.Build($"conv{appointment.ConversationId}-{appointment.StartUtc:yyyyMMddHHmm}@ai-receptionist",
-                    appointment.StartUtc, appointment.EndUtc, appointment.Subject, "Cancelled", _email.OwnerAddress,
-                    appointment.CustomerEmail, _time.GetUtcNow().UtcDateTime, cancel: true);
-                await _email.SendAsync(new EmailMessage(Recipients(appointment.CustomerEmail),
-                    "Cancelled: " + appointment.Subject,
-                    $"The appointment on {SlotFormatter.Friendly(appointment.StartUtc, tz)} has been cancelled.",
-                    new[] { new EmailAttachment("cancel.ics", "text/calendar", Encoding.UTF8.GetBytes(ics)) }), ct);
-                return null;
-            }
-            return "Neither calendar nor email is configured.";
+            if (!_email.IsConfigured)
+                return removedFromCalendar ? null : "Neither calendar nor email is configured.";
+
+            var tz = TimeZoneResolver.Resolve(timeZoneId);
+            var when = SlotFormatter.Friendly(appointment.StartUtc, tz);
+            // Same UID as the confirmation's .ics, so calendars that imported it remove the entry.
+            var ics = IcsBuilder.Build(Uid($"conv{appointment.ConversationId}-{appointment.StartUtc:yyyyMMddHHmm}"),
+                appointment.StartUtc, appointment.EndUtc, appointment.Subject, "Cancelled", _email.OwnerAddress,
+                appointment.CustomerEmail, _time.GetUtcNow().UtcDateTime, cancel: true);
+            var attachment = new[] { new EmailAttachment("cancel.ics", "text/calendar", Encoding.UTF8.GetBytes(ics)) };
+
+            if (!removedFromCalendar && OwnerOnly().Count > 0)
+                await _email.SendAsync(new EmailMessage(OwnerOnly(), "Cancelled: " + appointment.Subject,
+                    $"The appointment on {when} ({tz.Id}) has been cancelled.", attachment), ct);
+
+            if (IsCustomerAddress(appointment.CustomerEmail))
+                await _email.SendAsync(new EmailMessage(new[] { appointment.CustomerEmail! }, $"Cancelled: your appointment on {when}",
+                    $"Hi {appointment.CustomerName ?? "there"},\n\nYour appointment on {when} ({tz.Id}) has been cancelled.\n" +
+                    "If you would like a new time, just message us again.\n", attachment), ct);
+            return null;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -110,11 +123,58 @@ public sealed class AppointmentService
         }
     }
 
-    private List<string> Recipients(string? customerEmail)
+    /// <summary>
+    /// Sends the customer a short confirmation (no internal notes or chat transcript) with an .ics file.
+    /// Returns an error note for the dashboard if it could not be sent; a failure never undoes the booking.
+    /// </summary>
+    private async Task<string?> TryConfirmToCustomerAsync(BookingRequest request, CancellationToken ct)
     {
-        var to = new List<string>();
-        if (!string.IsNullOrWhiteSpace(_email.OwnerAddress)) to.Add(_email.OwnerAddress);
-        if (!string.IsNullOrWhiteSpace(customerEmail) && !to.Contains(customerEmail, StringComparer.OrdinalIgnoreCase)) to.Add(customerEmail);
-        return to;
+        if (!IsCustomerAddress(request.CustomerEmail)) return null;
+        if (!_email.IsConfigured) return "No confirmation email sent to the customer: email (SMTP) is not configured.";
+
+        try
+        {
+            var tz = TimeZoneResolver.Resolve(request.TimeZoneId);
+            var when = SlotFormatter.Friendly(request.StartUtc, tz);
+            var business = string.IsNullOrWhiteSpace(request.BusinessName) ? "us" : request.BusinessName;
+            var title = string.IsNullOrWhiteSpace(request.BusinessName) ? "Appointment" : $"Appointment with {request.BusinessName}";
+            var minutes = (request.EndUtc - request.StartUtc).TotalMinutes;
+
+            var ics = IcsBuilder.Build(Uid(request.IdempotencyKey), request.StartUtc, request.EndUtc, title,
+                $"{minutes:0}-minute appointment with {business}.", _email.OwnerAddress, request.CustomerEmail,
+                _time.GetUtcNow().UtcDateTime);
+
+            var body = new StringBuilder()
+                .AppendLine($"Hi {request.CustomerName ?? "there"},")
+                .AppendLine()
+                .AppendLine($"Your appointment with {business} is confirmed.")
+                .AppendLine()
+                .AppendLine($"When: {when} ({tz.Id})")
+                .AppendLine($"Duration: {minutes:0} minutes")
+                .AppendLine()
+                .AppendLine("Open the attached appointment.ics file to add it to your calendar.")
+                .AppendLine("To reschedule or cancel, just reply to us in the same chat.")
+                .AppendLine()
+                .AppendLine("Thank you,")
+                .AppendLine(string.IsNullOrWhiteSpace(request.BusinessName) ? "The team" : request.BusinessName)
+                .ToString();
+
+            await _email.SendAsync(new EmailMessage(new[] { request.CustomerEmail! }, $"Confirmed: {title} on {when}", body,
+                new[] { new EmailAttachment("appointment.ics", "text/calendar", Encoding.UTF8.GetBytes(ics)) }), ct);
+            return null;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _log.LogWarning(ex, "Confirmation email to the customer failed.");
+            return "Confirmation email to the customer failed: " + ex.Message;
+        }
     }
+
+    private bool IsCustomerAddress(string? email) =>
+        !string.IsNullOrWhiteSpace(email) && !string.Equals(email, _email.OwnerAddress, StringComparison.OrdinalIgnoreCase);
+
+    private IReadOnlyList<string> OwnerOnly() =>
+        string.IsNullOrWhiteSpace(_email.OwnerAddress) ? Array.Empty<string>() : new[] { _email.OwnerAddress };
+
+    private static string Uid(string key) => key + "@ai-receptionist";
 }

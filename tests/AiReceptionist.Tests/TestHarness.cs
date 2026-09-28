@@ -144,9 +144,11 @@ public sealed class FakeEmail : IEmailSender
     public bool IsConfigured { get; set; } = true;
     public string? OwnerAddress => "owner@example.com";
     public List<EmailMessage> Sent { get; } = new();
+    public bool Throw { get; set; }
 
     public Task SendAsync(EmailMessage message, CancellationToken ct)
     {
+        if (Throw) throw new InvalidOperationException("SMTP down");
         Sent.Add(message);
         return Task.CompletedTask;
     }

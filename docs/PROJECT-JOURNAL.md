@@ -208,6 +208,7 @@ Live data is in `/home/data` on the App Service (kept across restarts and deploy
 | WhatsApp: `0 message(s) queued` lines | Delivery/read receipts, which is normal | Ignore; the payload is logged below the line |
 | WhatsApp replies stop after a day | Temporary 24-hour token | Use the permanent system-user token (step 8.7) |
 | WhatsApp text arrives but no voice note | WhatsApp rejected the audio *link* | (Fixed in code) audio is now uploaded to WhatsApp and sent by media id: `git pull` |
+| Customer got no email after an Outlook booking | Only the Outlook attendee invite was used (often not delivered, and it showed internal notes) | (Fixed in code) customers now get a clean confirmation email with `appointment.ics` via Gmail SMTP, and a cancellation email; Outlook attendee invites are off by default. The customer must give an email in the chat. Problems show in red on **Appointments** |
 | Voice note on Messenger/Instagram gets "team will contact you" | Messenger audio is MP4, which the old speech-to-text rejected | (Fixed in code) Azure fast transcription handles MP4/AAC/OGG/MP3: `git pull`. Unclear notes now get "could you type it instead?" |
 | Customers speak Urdu/English mixed | — | Set `Speech:RecognitionLanguage` to `en-US,ur-IN` (auto-detects between them) |
 | Messenger "Verify and save" error | Access token pasted as verify token, or Messenger not *active* | Use the made-up `Meta:VerifyToken` word; save the Page token and restart first |

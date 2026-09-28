@@ -360,6 +360,77 @@ public class ConversationServiceTests
     }
 
     [Fact]
+    public async Task Calendar_booking_emails_the_customer_a_clean_confirmation_with_ics()
+    {
+        await using var h = new TestHarness();
+        await h.SendAsync("Can I book an appointment tomorrow afternoon? jane@example.com");
+        await h.SendAsync("yes");
+
+        Assert.Single(h.Calendar.Created);
+        var email = Assert.Single(h.Email.Sent);
+        Assert.Equal(new[] { "jane@example.com" }, email.To);
+        Assert.Contains("Contoso Clinic", email.Subject);
+        Assert.Contains("Tue 29 Sep, 12:00 PM", email.Body);
+        Assert.DoesNotContain("Booked automatically", email.Body); // no internal notes or transcript
+        var ics = System.Text.Encoding.UTF8.GetString(Assert.Single(email.Attachments!).Data);
+        Assert.Contains("DTSTART:20260929T120000Z", ics);
+        Assert.Contains("ATTENDEE;ROLE=REQ-PARTICIPANT:mailto:jane@example.com", ics);
+
+        await using var db = h.Db();
+        var appt = await db.Appointments.SingleAsync();
+        Assert.Equal(AppointmentStatus.Booked, appt.Status);
+        Assert.Null(appt.Error);
+    }
+
+    [Fact]
+    public async Task Failed_customer_email_is_noted_but_keeps_the_booking()
+    {
+        await using var h = new TestHarness();
+        h.Email.Throw = true;
+        await h.SendAsync("Can I book an appointment tomorrow afternoon? jane@example.com");
+        await h.SendAsync("yes");
+
+        await using var db = h.Db();
+        var appt = await db.Appointments.SingleAsync();
+        Assert.Equal(AppointmentStatus.Booked, appt.Status);
+        Assert.Contains("Confirmation email to the customer failed", appt.Error);
+        Assert.Contains(h.Channel.Sent, s => s.Text?.Contains("You're all set") == true);
+    }
+
+    [Fact]
+    public async Task Email_fallback_sends_notes_to_owner_and_a_clean_confirmation_to_customer()
+    {
+        await using var h = new TestHarness();
+        h.Calendar.Throw = true;
+        await h.SendAsync("Can I book an appointment tomorrow afternoon? jane@example.com");
+        await h.SendAsync("yes");
+
+        Assert.Equal(2, h.Email.Sent.Count);
+        var owner = h.Email.Sent.Single(e => e.To.Contains("owner@example.com"));
+        Assert.DoesNotContain("jane@example.com", owner.To);
+        Assert.Contains("Booked automatically", owner.Body);
+        var customer = h.Email.Sent.Single(e => e.To.Contains("jane@example.com"));
+        Assert.DoesNotContain("Booked automatically", customer.Body);
+    }
+
+    [Fact]
+    public async Task Cancelling_a_calendar_booking_emails_the_customer()
+    {
+        await using var h = new TestHarness();
+        await h.SendAsync("Can I book an appointment tomorrow afternoon? jane@example.com");
+        await h.SendAsync("yes");
+        h.Email.Sent.Clear();
+
+        await h.SendAsync("please cancel my appointment");
+
+        Assert.Single(h.Calendar.Cancelled);
+        var email = Assert.Single(h.Email.Sent);
+        Assert.Equal(new[] { "jane@example.com" }, email.To);
+        Assert.StartsWith("Cancelled:", email.Subject);
+        Assert.Contains("METHOD:CANCEL", System.Text.Encoding.UTF8.GetString(Assert.Single(email.Attachments!).Data));
+    }
+
+    [Fact]
     public async Task Customer_can_cancel_their_appointment()
     {
         await using var h = new TestHarness();

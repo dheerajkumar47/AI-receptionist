@@ -42,6 +42,7 @@ service at a time as described in **[docs/SETUP.md](docs/SETUP.md)**. The dashbo
 
 - **[docs/SETUP.md](docs/SETUP.md)**: step-by-step setup for Azure OpenAI, Azure AI Speech, Microsoft 365 / Entra ID, SMTP, the Meta app (Facebook, Instagram, WhatsApp), X, the public webhook URL and Azure App Service deployment.
 - **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**: how a message flows through the system, the design decisions, and how to add a new channel.
+- **[docs/CLIENT-ONBOARDING.md](docs/CLIENT-ONBOARDING.md)**: setting it up for a client: the discovery survey, which accounts the client owns and how they give access, the setup runbook, the customer journey and the handover checklist.
 - **[docs/ACCEPTANCE-TEST.md](docs/ACCEPTANCE-TEST.md)**: the pre-flight checklist and the 15-minute acceptance script. It also includes a shot list for recording the demo video.
 
 ## Solution layout
