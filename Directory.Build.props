@@ -7,5 +7,9 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <!-- CS1591: missing XML comment on public member. Documentation is focused on types/behaviour, not every property. -->
     <NoWarn>$(NoWarn);CS1591;CS1573</NoWarn>
+    <Authors>Dheeraj Kumar</Authors>
+    <Company>Dheeraj Software Solutions</Company>
+    <Copyright>Copyright (c) 2026 Dheeraj Kumar</Copyright>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
   </PropertyGroup>
 </Project>

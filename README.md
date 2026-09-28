@@ -4,6 +4,7 @@
 ![.NET 10](https://img.shields.io/badge/.NET-10%20LTS-512BD4)
 ![Blazor](https://img.shields.io/badge/dashboard-Blazor%20Server-5C2D91)
 ![Azure](https://img.shields.io/badge/hosted%20on-Azure%20App%20Service-0078D4)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 An AI receptionist for small businesses that answers **WhatsApp, Facebook Messenger, Instagram and X** direct messages
 around the clock. It understands what the customer wants, replies in text or a natural **voice note**, books appointments
@@ -118,6 +119,10 @@ dotnet format --verify-no-changes    # check formatting (also enforced in CI)
 - **X DMs** require a paid X API plan and are polled every 60 seconds.
 - **Scale.** One instance with SQLite and an in-memory queue suits a single business per deployment. See ARCHITECTURE.md
   for scaling out.
+
+## License
+
+Released under the [MIT License](LICENSE). You may use, modify and distribute it, keeping the copyright notice.
 
 ---
 
