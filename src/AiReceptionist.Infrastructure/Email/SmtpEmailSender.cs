@@ -24,7 +24,7 @@ public sealed class SmtpEmailSender : IEmailSender
         if (message.To.Count == 0) throw new InvalidOperationException("No recipients.");
 
         var mime = new MimeMessage();
-        mime.From.Add(new MailboxAddress(_options.FromName, _options.FromAddress!));
+        mime.From.Add(new MailboxAddress(_options.FromName, _options.Sender!));
         foreach (var to in message.To) mime.To.Add(MailboxAddress.Parse(to));
         mime.Subject = message.Subject;
 

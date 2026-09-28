@@ -1,0 +1,455 @@
+@page "/connections"
+@using System.Security.Cryptography
+@using Microsoft.Extensions.Options
+@using Microsoft.JSInterop
+@using AiReceptionist.Infrastructure
+@using AiReceptionist.Infrastructure.Calendar
+@using AiReceptionist.Web.Configuration
+@implements IDisposable
+@inject IConfiguration Config
+@inject IntegrationSettingsStore Store
+@inject ConnectionTester Tester
+@inject AppRestarter Restarter
+@inject IJSRuntime JS
+@inject IEnumerable<IChannelConnector> ChannelConnectors
+@inject IIntentEngine Engine
+@inject IVoiceSynthesizer Voice
+@inject ICalendarProvider Calendar
+@inject IEmailSender Email
+@inject IOptions<AppOptions> AppOptions
+@inject IOptions<GraphCalendarOptions> CalendarOptions
+
+<PageTitle>Connections · AI Receptionist</PageTitle>
+<h1>Connections</h1>
+<p class="muted">
+    Connect the business's accounts here: no code, no server settings. Test each one, then <strong>Save &amp; apply</strong>.
+    Keys and passwords are stored encrypted and never shown again.
+</p>
+
+@if (_message is not null) { <div class="notice @(_isError ? "danger" : "")">@_message</div> }
+
+@foreach (var sec in _sections)
+{
+    <section class="card" id="@sec.Id">
+        <div class="page-header">
+            <h2>@sec.Title @StatusBadge(sec.Status())</h2>
+        </div>
+        <p class="small muted">@sec.Intro</p>
+        @if (sec.Steps.Length > 0)
+        {
+            <details class="small">
+                <summary>Where do I find these?</summary>
+                <ol>@foreach (var step in sec.Steps) { <li>@step</li> }</ol>
+            </details>
+        }
+        @sec.Extra?.Invoke()
+        <div class="form-grid-2">
+            @foreach (var f in sec.Fields)
+            {
+                <label>
+                    <span>@f.Label @Source(f)</span>
+                    @if (f.Choices is not null)
+                    {
+                        <select value="@Value(f)" @onchange="e => SetValue(f, e.Value?.ToString())">
+                            @foreach (var (value, text) in f.Choices) { <option value="@value">@text</option> }
+                        </select>
+                    }
+                    else
+                    {
+                        <input type="@(f.Secret ? "password" : "text")" autocomplete="off" placeholder="@Placeholder(f)"
+                               value="@Value(f)" @onchange="e => SetValue(f, e.Value?.ToString())" />
+                    }
+                    @if (f.Help is not null) { <span class="small muted">@f.Help</span> }
+                    @if (_stored.Contains(f.Key) && !_edits.ContainsKey(f.Key))
+                    {
+                        <button type="button" class="btn small" @onclick="() => Remove(f)">Remove saved value</button>
+                    }
+                </label>
+            }
+        </div>
+        <div class="row">
+            @foreach (var action in sec.Actions)
+            {
+                <button class="btn" disabled="@_busy" @onclick="() => RunAsync(sec, action)">@action.Label</button>
+            }
+            @if (_results.TryGetValue(sec.Id, out var r))
+            {
+                <span class="small @(r.Ok ? "ok" : "error")">@(r.Ok ? "✔ " : "✖ ")@r.Message</span>
+            }
+        </div>
+    </section>
+}
+
+<div class="sticky-save">
+    <button class="btn primary" disabled="@(_busy || _edits.Count == 0)" @onclick="SaveAsync">
+        Save &amp; apply@(_edits.Count > 0 ? $" ({_edits.Count} change{(_edits.Count == 1 ? "" : "s")})" : "")
+    </button>
+    @if (_edits.Count > 0) { <button class="btn" @onclick="Discard">Discard changes</button> }
+</div>
+
+@code {
+    private sealed record Field(string Key, string Label, bool Secret = false, string? Help = null, string? Placeholder = null,
+        (string Value, string Text)[]? Choices = null);
+
+    private sealed record ActionDef(string Label, Func<CancellationToken, Task<TestResult>> Run);
+
+    private sealed record Section(string Id, string Title, string Intro, Func<bool?> Status, Field[] Fields, ActionDef[] Actions,
+        string[] Steps, Func<RenderFragment>? Extra = null);
+
+    private readonly Dictionary<string, string?> _edits = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, TestResult> _results = new();
+    private HashSet<string> _stored = new(StringComparer.OrdinalIgnoreCase);
+    private List<Section> _sections = new();
+    private string? _message;
+    private bool _isError, _busy;
+    private readonly CancellationTokenSource _cts = new();
+
+    private string BaseUrl => AppOptions.Value.PublicBaseUrl.TrimEnd('/');
+
+    protected override void OnInitialized()
+    {
+        _stored = Store.Load().Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        _sections = BuildSections();
+    }
+
+    // ------------------------------------------------------------------ values
+
+    /// <summary>What the service will use: the pending edit, otherwise the running configuration.</summary>
+    private string? Effective(string key) => _edits.TryGetValue(key, out var v) ? v : Config[key];
+
+    private string? Value(Field f) => f.Secret ? (_edits.TryGetValue(f.Key, out var v) ? v : "") : Effective(f.Key);
+
+    private string? Placeholder(Field f) =>
+        f.Secret && !string.IsNullOrEmpty(Config[f.Key]) && !_edits.ContainsKey(f.Key) ? "•••••••• saved (type to replace)" : f.Placeholder;
+
+    private void SetValue(Field f, string? value)
+    {
+        value = value?.Trim();
+        if (f.Secret && string.IsNullOrEmpty(value)) _edits.Remove(f.Key);          // empty password box = keep the saved one
+        else if (!f.Secret && value == (Config[f.Key] ?? "") && !_stored.Contains(f.Key)) _edits.Remove(f.Key);
+        else _edits[f.Key] = value;
+        _message = null;
+    }
+
+    private void Remove(Field f) => _edits[f.Key] = null;
+
+    private void Discard()
+    {
+        _edits.Clear();
+        _message = null;
+    }
+
+    private RenderFragment Source(Field f)
+    {
+        if (_edits.TryGetValue(f.Key, out var pending))
+            return @<span class="badge warn">@(pending is null ? "will be removed" : "unsaved")</span>;
+        if (_stored.Contains(f.Key)) return @<span class="badge ok">saved here</span>;
+        if (!string.IsNullOrEmpty(Config[f.Key])) return @<span class="badge muted">server setting</span>;
+        return @<span></span>;
+    }
+
+    private static RenderFragment StatusBadge(bool? ok) => ok switch
+    {
+        true => @<span class="badge ok">connected</span>,
+        false => @<span class="badge muted">not connected</span>,
+        null => @<span></span>,
+    };
+
+    // ------------------------------------------------------------------ actions
+
+    private async Task RunAsync(Section section, ActionDef action)
+    {
+        _busy = true;
+        _results.Remove(section.Id);
+        StateHasChanged();
+        try
+        {
+            _results[section.Id] = await action.Run(_cts.Token);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _results[section.Id] = new TestResult(false, ex.Message);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private Task SaveAsync()
+    {
+        try
+        {
+            Store.Save(new Dictionary<string, string?>(_edits));
+            _stored = Store.Load().Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var count = _edits.Count;
+            _edits.Clear();
+            if (AppRestarter.CanRestartItself)
+            {
+                Show($"Saved {count} setting(s). The receptionist is restarting to apply them: this page reconnects in about 30 seconds. " +
+                     "If it doesn't, open Azure → your app → Restart.", false);
+                Restarter.RestartSoon();
+            }
+            else
+            {
+                Show($"Saved {count} setting(s). Restart the app (Ctrl+C, then run it again) to apply them.", false);
+            }
+        }
+        catch (Exception ex)
+        {
+            Show("Saving failed: " + ex.Message, true);
+        }
+        return Task.CompletedTask;
+    }
+
+    private Task<TestResult> GenerateVerifyToken()
+    {
+        _edits["Meta:VerifyToken"] = Convert.ToHexString(RandomNumberGenerator.GetBytes(12)).ToLowerInvariant();
+        return Task.FromResult(new TestResult(true, "New verify token created. Save, then paste it into each webhook in the Meta app."));
+    }
+
+    private Task<TestResult> DisconnectOutlook()
+    {
+        var path = Path.GetFullPath(CalendarOptions.Value.TokenCachePath);
+        if (File.Exists(path)) File.Delete(path);
+        if (AppRestarter.CanRestartItself) Restarter.RestartSoon();
+        return Task.FromResult(new TestResult(true, AppRestarter.CanRestartItself
+            ? "Outlook disconnected. After the restart (about 30 s) a new sign-in code appears here."
+            : "Outlook disconnected. Restart the app to sign in with another account."));
+    }
+
+    private Task<TestResult> ApplyEmailPreset(string host, string port, string security)
+    {
+        _edits["Email:Host"] = host;
+        _edits["Email:Port"] = port;
+        _edits["Email:Security"] = security;
+        return Task.FromResult(new TestResult(true, $"Server set to {host}:{port}. Now enter the email address and app password."));
+    }
+
+    private SmtpOptions EffectiveSmtp() => new()
+    {
+        Host = Effective("Email:Host"),
+        Port = int.TryParse(Effective("Email:Port"), out var p) ? p : 587,
+        Security = Effective("Email:Security") ?? "StartTls",
+        Username = Effective("Email:Username"),
+        Password = Effective("Email:Password"),
+        FromAddress = Effective("Email:FromAddress"),
+        FromName = Effective("Email:FromName") is { Length: > 0 } name ? name : "AI Receptionist",
+        OwnerAddress = Effective("Email:OwnerAddress"),
+    };
+
+    private async Task CopyAsync(string text)
+    {
+        try { await JS.InvokeVoidAsync("navigator.clipboard.writeText", text); }
+        catch (JSException) { /* clipboard blocked: the text is visible to copy by hand */ }
+    }
+
+    private void Show(string message, bool isError)
+    {
+        _message = message;
+        _isError = isError;
+    }
+
+    private bool? Channel(string id) => ChannelConnectors.FirstOrDefault(c => c.ChannelId == id)?.IsConfigured;
+
+    public void Dispose()
+    {
+        _cts.Cancel();
+        _cts.Dispose();
+    }
+
+    // ------------------------------------------------------------------ sections
+
+    private List<Section> BuildSections() => new()
+    {
+        new("whatsapp", "💬 WhatsApp Business",
+            "Replies to customers on the business's WhatsApp number (Meta Cloud API).",
+            () => Channel(Channels.WhatsApp),
+            new Field[]
+            {
+                new("Meta:WhatsApp:AccessToken", "Permanent access token", Secret: true, Help: "System-user token (never expires)."),
+                new("Meta:WhatsApp:PhoneNumberId", "Phone number ID", Help: "A number ID, not the phone number."),
+                new("Meta:WhatsApp:BusinessAccountId", "WhatsApp Business Account ID", Help: "Only needed for “Link WhatsApp account”."),
+            },
+            new ActionDef[]
+            {
+                new("Test", ct => Tester.WhatsAppAsync(Effective("Meta:WhatsApp:AccessToken"), Effective("Meta:WhatsApp:PhoneNumberId"), ct)),
+                new("Link WhatsApp account", ct => Tester.LinkWhatsAppAsync(Effective("Meta:WhatsApp:AccessToken"), Effective("Meta:WhatsApp:BusinessAccountId"), ct)),
+            },
+            new[]
+            {
+                "developers.facebook.com → your app → WhatsApp → API Setup: copy the Phone number ID and the WhatsApp Business Account ID.",
+                "business.facebook.com → Settings → Users → System users → your bot user → Generate token (permissions whatsapp_business_messaging and whatsapp_business_management) → paste it above.",
+                "Click Test, then Link WhatsApp account.",
+                "In the Meta app → WhatsApp → Configuration → Webhook: paste the WhatsApp callback URL and verify token from “Meta app & webhooks” below, then subscribe to “messages”.",
+            }),
+
+        new("messenger", "📘 Facebook Messenger",
+            "Replies to messages sent to the business's Facebook Page.",
+            () => Channel(Channels.Facebook),
+            new Field[] { new("Meta:Facebook:PageAccessToken", "Page access token", Secret: true) },
+            new ActionDef[]
+            {
+                new("Test", ct => Tester.MessengerAsync(Effective("Meta:Facebook:PageAccessToken"), ct)),
+                new("Subscribe Page", ct => Tester.SubscribePageAsync(Effective("Meta:Facebook:PageAccessToken"), ct)),
+            },
+            new[]
+            {
+                "Meta app → Use cases → Engage with customers on Messenger → Customize → Generate access tokens → connect the Page → Generate → paste above.",
+                "Click Test, then Subscribe Page.",
+                "Same screen → Configure webhooks: paste the Messenger callback URL and verify token from below; subscribe the Page to “messages”.",
+            }),
+
+        new("instagram", "📸 Instagram Direct",
+            "Replies to Instagram DMs of a professional account. Real DMs from the public need a published (verified) Meta app.",
+            () => Channel(Channels.Instagram),
+            new Field[]
+            {
+                new("Meta:Instagram:AccessToken", "Instagram access token", Secret: true),
+                new("Meta:Instagram:ApiBaseUrl", "Connected with", Choices: new[]
+                {
+                    ("https://graph.instagram.com", "Instagram login (Instagram API)"),
+                    ("", "Facebook Page (Messenger API for Instagram)"),
+                }),
+                new("Meta:Instagram:AppSecret", "Instagram app secret", Secret: true, Help: "Instagram login only: shown next to the Instagram app ID."),
+            },
+            new ActionDef[]
+            {
+                new("Test", ct => Tester.InstagramAsync(Effective("Meta:Instagram:AccessToken"), Effective("Meta:Instagram:ApiBaseUrl"), ct)),
+                new("Link Instagram account", ct => Tester.LinkInstagramAsync(Effective("Meta:Instagram:AccessToken"), Effective("Meta:Instagram:ApiBaseUrl"), ct)),
+            },
+            new[]
+            {
+                "Instagram app: Settings → Account type → switch to Professional; Settings → Messages → Connected tools → Allow access to messages.",
+                "Meta app → Use cases → Manage messaging & content on Instagram → API setup with Instagram login → Add account → Generate token → paste above; copy the Instagram app secret too.",
+                "Click Test, then Link Instagram account; configure the webhook with the Instagram callback URL below.",
+            }),
+
+        new("meta", "🔐 Meta app & webhooks",
+            "Shared by WhatsApp, Messenger and Instagram: the app secret checks that messages really come from Meta.",
+            () => !string.IsNullOrEmpty(Config["Meta:AppSecret"]) && !string.IsNullOrEmpty(Config["Meta:VerifyToken"]),
+            new Field[]
+            {
+                new("Meta:AppSecret", "App secret", Secret: true, Help: "Meta app → App settings → Basic → App secret."),
+                new("Meta:VerifyToken", "Verify token", Help: "Any made-up word; the same word goes into each webhook in the Meta app."),
+            },
+            new ActionDef[] { new("Generate verify token", _ => GenerateVerifyToken()) },
+            Array.Empty<string>(),
+            () => @<table class="table compact">
+                @foreach (var (name, id) in new[] { ("WhatsApp", Channels.WhatsApp), ("Messenger", Channels.Facebook), ("Instagram", Channels.Instagram) })
+                {
+                    var url = $"{BaseUrl}/webhooks/{id}";
+                    <tr><td>@name callback URL</td><td><code>@url</code></td><td><button class="btn small" @onclick="() => CopyAsync(url)">Copy</button></td></tr>
+                }
+                <tr><td>Privacy policy URL</td><td><code>@($"{BaseUrl}/privacy")</code></td><td><button class="btn small" @onclick='() => CopyAsync($"{BaseUrl}/privacy")'>Copy</button></td></tr>
+            </table>),
+
+        new("outlook", "📅 Outlook calendar",
+            "Bookings go straight into the calendar, and busy times are never offered.",
+            () => Calendar is GraphCalendarProvider g ? !g.NeedsInteractiveSignIn : Calendar.IsConfigured ? true : false,
+            new Field[]
+            {
+                new("Microsoft365:SignInMode", "Account type", Choices: new[]
+                {
+                    ("Personal", "Outlook.com / personal Microsoft account"),
+                    ("App", "Microsoft 365 work account (admin consent)"),
+                }),
+                new("Microsoft365:ClientId", "Application (client) ID", Help: "From the Entra app registration. One registration can serve every client."),
+                new("Microsoft365:TenantId", "Directory (tenant) ID", Help: "Work accounts only. Leave empty for Outlook.com."),
+                new("Microsoft365:ClientSecret", "Client secret", Secret: true, Help: "Work accounts only."),
+                new("Microsoft365:CalendarUser", "Calendar mailbox", Placeholder: "owner@company.com", Help: "Work accounts only."),
+            },
+            new ActionDef[] { new("Disconnect Outlook account", _ => DisconnectOutlook()) },
+            new[]
+            {
+                "Outlook.com: choose “Outlook.com / personal”, enter the Application (client) ID, Save & apply.",
+                "A sign-in code appears in this box: open microsoft.com/link, enter the code and sign in with the business's Outlook account. Done: it stays connected.",
+                "Microsoft 365 work account: the company admin grants consent to the app registration (docs/SETUP.md §5b); fill in all five fields.",
+            },
+            () => Calendar is GraphCalendarProvider { NeedsInteractiveSignIn: true } g
+                ? @<div class="notice warn">
+                      <strong>Sign in to connect:</strong> @(g.SignInPrompt ?? "Preparing a sign-in code… refresh in a few seconds.")
+                      <a href="https://microsoft.com/link" target="_blank" rel="noopener">Open microsoft.com/link</a>
+                  </div>
+                : @<span></span>),
+
+        new("email", "✉️ Email",
+            "Sends booking confirmations and reminders to customers, and notifications to the business.",
+            () => Email.IsConfigured,
+            new Field[]
+            {
+                new("Email:Host", "SMTP server", Placeholder: "smtp.gmail.com"),
+                new("Email:Port", "Port", Placeholder: "587"),
+                new("Email:Security", "Security", Choices: new[] { ("StartTls", "STARTTLS (587)"), ("SslOnConnect", "SSL (465)"), ("None", "None") }),
+                new("Email:Username", "Email address (login)"),
+                new("Email:Password", "App password", Secret: true, Help: "Gmail: an app password, not the normal password."),
+                new("Email:FromAddress", "Send from", Help: "Leave empty to send from the login address."),
+                new("Email:FromName", "Sender name", Placeholder: "Dheeraj Software Solutions"),
+                new("Email:OwnerAddress", "Business notifications go to"),
+            },
+            new ActionDef[]
+            {
+                new("Use Gmail", _ => ApplyEmailPreset("smtp.gmail.com", "587", "StartTls")),
+                new("Use Outlook.com", _ => ApplyEmailPreset("smtp-mail.outlook.com", "587", "StartTls")),
+                new("Use Microsoft 365", _ => ApplyEmailPreset("smtp.office365.com", "587", "StartTls")),
+                new("Send test email", ct => Tester.EmailAsync(EffectiveSmtp(), ct)),
+            },
+            new[]
+            {
+                "Gmail: Google Account → Security → 2-Step Verification (turn on) → App passwords → create one named “AI Receptionist” → paste the 16 letters as App password.",
+                "Click “Use Gmail”, fill in the addresses, then Send test email.",
+            }),
+
+        new("ai", "🧠 AI (Azure OpenAI)",
+            "Understands messages and writes replies. Usually provided by your service provider.",
+            () => Engine is not KeywordIntentEngine,
+            new Field[]
+            {
+                new("OpenAI:Provider", "Provider", Choices: new[] { ("AzureOpenAI", "Azure OpenAI"), ("OpenAI", "OpenAI") }),
+                new("OpenAI:Endpoint", "Endpoint", Placeholder: "https://my-resource.openai.azure.com/"),
+                new("OpenAI:ApiKey", "API key", Secret: true),
+                new("OpenAI:Deployment", "Deployment / model", Placeholder: "gpt-4.1-mini"),
+            },
+            new ActionDef[]
+            {
+                new("Test", ct => Tester.OpenAiAsync(Effective("OpenAI:Provider"), Effective("OpenAI:Endpoint"), Effective("OpenAI:ApiKey"), Effective("OpenAI:Deployment"), ct)),
+            },
+            new[] { "Azure AI Foundry → your project → Models + endpoints → the deployment: copy the endpoint (Target URI up to .com/), key and deployment name." }),
+
+        new("voice", "🔊 Voice (Azure AI Speech)",
+            "Voice replies and understanding customers' voice notes. Usually provided by your service provider.",
+            () => Voice.IsConfigured,
+            new Field[]
+            {
+                new("Speech:Key", "Key", Secret: true),
+                new("Speech:Region", "Region", Placeholder: "centralindia"),
+                new("Speech:RecognitionLanguage", "Voice-note languages", Placeholder: "en-US,ur-IN", Help: "Comma-separated; the spoken one is detected."),
+            },
+            new ActionDef[] { new("Test", ct => Tester.SpeechAsync(Effective("Speech:Key"), Effective("Speech:Region"), ct)) },
+            new[] { "Azure portal → your Speech resource → Keys and Endpoint: copy Key 1 and the Location/Region." }),
+
+        new("x", "✖️ X (Twitter) DMs",
+            "Checks X direct messages every minute. Requires a paid X API plan.",
+            () => Channel(Channels.Twitter),
+            new Field[]
+            {
+                new("Twitter:ConsumerKey", "API key"),
+                new("Twitter:ConsumerSecret", "API key secret", Secret: true),
+                new("Twitter:AccessToken", "Access token"),
+                new("Twitter:AccessTokenSecret", "Access token secret", Secret: true),
+            },
+            Array.Empty<ActionDef>(),
+            new[] { "developer.x.com → your app → Keys and tokens (app permissions: Read, write and Direct Messages)." }),
+
+        new("admin", "👤 Dashboard login",
+            "Who can open this dashboard.",
+            () => null,
+            new Field[]
+            {
+                new("Admin:Username", "Username", Placeholder: "admin"),
+                new("Admin:Password", "New password", Secret: true, Help: "At least 12 characters. You'll use it at the next sign-in."),
+            },
+            Array.Empty<ActionDef>(),
+            Array.Empty<string>()),
+    };
+}

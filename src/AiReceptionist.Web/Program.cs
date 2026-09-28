@@ -2,6 +2,7 @@ using AiReceptionist.Core.Data;
 using AiReceptionist.Infrastructure;
 using AiReceptionist.Infrastructure.Voice;
 using AiReceptionist.Web.Components;
+using AiReceptionist.Web.Configuration;
 using AiReceptionist.Web.Endpoints;
 using AiReceptionist.Web.Workers;
 using Microsoft.AspNetCore.Authentication.Cookies;
@@ -30,8 +31,20 @@ if (Environment.GetEnvironmentVariable("WEBSITE_SITE_NAME") is not null &&
     if (Rebase(builder.Configuration["Media:Directory"]) is { } mediaDir) overrides["Media:Directory"] = mediaDir;
     if (Rebase(builder.Configuration["Microsoft365:TokenCachePath"] ?? "data/outlook-token-cache.bin") is { } cache)
         overrides["Microsoft365:TokenCachePath"] = cache;
+    // The public URL (used for webhooks and voice clips) defaults to the App Service address.
+    if (Environment.GetEnvironmentVariable("WEBSITE_HOSTNAME") is { Length: > 0 } host &&
+        (builder.Configuration["App:PublicBaseUrl"] is not { Length: > 0 } url || url.Contains("localhost", StringComparison.OrdinalIgnoreCase)))
+        overrides["App:PublicBaseUrl"] = "https://" + host;
     builder.Configuration.AddInMemoryCollection(overrides);
 }
+
+// Connections entered on the dashboard (encrypted, beside the database) override every other source.
+var integrations = IntegrationSettingsStore.CreateBeside(new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder(
+    builder.Configuration.GetConnectionString("Receptionist") ?? "Data Source=data/receptionist.db").DataSource);
+((IConfigurationBuilder)builder.Configuration).Add(new IntegrationSettingsSource(integrations));
+builder.Services.AddSingleton(integrations);
+builder.Services.AddSingleton<AppRestarter>();
+builder.Services.AddSingleton<ConnectionTester>();
 
 builder.Services.AddAiReceptionist(builder.Configuration);
 builder.Services.AddHostedService<InboundProcessingWorker>();

@@ -71,6 +71,7 @@ a.stat:hover { text-decoration: none; border-color: var(--accent); }
 .small { font-size: 12px; }
 .muted { color: var(--muted); }
 .error { color: var(--danger); }
+.ok { color: var(--ok); }
 
 .badge { display: inline-block; white-space: nowrap; font-size: 11px; padding: 1px 7px; border-radius: 99px; background: var(--accent-soft); color: var(--accent); margin-left: 4px; }
 .badge.ok { background: var(--ok-soft); color: var(--ok); }
@@ -148,3 +149,8 @@ audio.mini { height: 28px; display: block; margin-top: 4px; }
     .thread { min-height: 300px; }
     h1 { font-size: 19px; }
 }
+
+/* Connections page */
+details.small { margin: 4px 0 10px; }
+details.small ol { margin: 6px 0 0; padding-left: 20px; }
+label .btn.small { align-self: flex-start; margin-top: 4px; }

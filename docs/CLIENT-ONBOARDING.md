@@ -50,7 +50,28 @@ Send these questions as a form or WhatsApp message. The answers fill the dashboa
 
 ---
 
-## 2. Accounts the client owns (and how they give you access)
+## 2. Connecting accounts: the Connections page
+
+Every account is connected from the dashboard's **Connections** page: no code, no Azure settings, no terminal.
+
+| Card | What the client (or you) does |
+|---|---|
+| WhatsApp, Messenger, Instagram | Paste the token and IDs → **Test** → **Link / Subscribe** (the one-time Meta call that makes messages arrive) |
+| Meta app & webhooks | Paste the app secret; **Generate verify token**; **Copy** the callback URLs into the Meta app |
+| Outlook calendar | Choose Outlook.com, **Save & apply**, then sign in with the code shown on the card (microsoft.com/link). *Disconnect* switches accounts |
+| Email | **Use Gmail** (fills the server), enter the address and app password → **Send test email** |
+| AI, Voice | Usually yours as the provider: paste once per client, **Test** |
+| Dashboard login | Change the admin username and password |
+
+Each card has a *Where do I find these?* guide. Values are stored **encrypted** in the app's own data folder and override
+server settings; passwords are never shown again. **Save & apply** restarts the receptionist (about 30 seconds on Azure).
+
+*Why tokens and not a "Log in with Facebook" button?* Meta's one-click onboarding (Facebook Login for Business and
+WhatsApp Embedded Signup) is only available to verified **Meta Tech Providers**. Once your business is verified and
+approved as a Tech Provider, a login button can replace the token fields; until then, the Connections page is the fastest
+compliant route.
+
+## 3. Accounts the client owns (and how they give you access)
 
 The client **owns** every account. You get admin or partner access and **never ask for their personal passwords**.
 
@@ -70,7 +91,7 @@ verification stay with the client, and you can hand over or step away cleanly.
 
 ---
 
-## 3. Your setup runbook (about 2–4 hours per client)
+## 4. Your setup runbook (about 2–4 hours per client)
 
 | # | Step | Guide |
 |---|---|---|
@@ -78,15 +99,15 @@ verification stay with the client, and you can hand over or step away cleanly.
 | 2 | Azure OpenAI + Speech: reuse yours (bill usage in the monthly fee) or create them in the client's subscription | SETUP.md §3–4 |
 | 3 | Meta app in the client's portfolio: WhatsApp, Messenger, Instagram; **permanent system-user token** | SETUP.md §7, PROJECT-JOURNAL.md §8–10 |
 | 4 | Calendar and notification email | SETUP.md §5–6 |
-| 5 | Paste all settings into the Web App (*Environment variables → Advanced edit*), including a strong `Admin__Password` | SETUP.md §9 |
+| 5 | Open the client's dashboard → **Connections**: fill and test every card (or paste all settings into the Web App's *Environment variables*) | Section 2 |
 | 6 | Dashboard **Settings**: fill from survey section A–B; **Intents**: add the top 10 questions from D-18 as guidance/examples | — |
 | 7 | Webhook URLs in the Meta app → the client's Azure address; `subscribed_apps` for WhatsApp and Instagram | SETUP.md §9 step 7 |
 | 8 | Acceptance test on every channel, then **Settings → Start fresh** | ACCEPTANCE-TEST.md |
-| 9 | Handover session with the client (section 5) | — |
+| 9 | Handover session with the client (section 6) | — |
 
 ---
 
-## 4. The customer's experience
+## 5. The customer's experience
 
 ```
 Customer sends a DM ─► AI replies in seconds (text, or voice for voice notes)
@@ -97,6 +118,11 @@ Customer sends a DM ─► AI replies in seconds (text, or voice for voice notes
         │        └─ "Yes" ─► booked in the calendar
         │                    ├─ chat confirmation (text + voice)
         │                    └─ confirmation email with appointment.ics (if they gave an email)
+        │
+        │        └─ "Let me check and confirm" ─► "No problem, take your time!"
+        │                    └─ still no answer ─► follow-up after 1 hour, and again after ~23 hours
+        │
+        ├─ 15 minutes before the appointment ─► reminder message (or email)
         │
         ├─ "Please cancel" ─► removed from the calendar + cancellation email
         │
@@ -109,6 +135,13 @@ What the customer receives:
 |---|---|---|
 | Booking confirmed | "You're all set, {name}! … confirmed for {slot}" (text, and voice if enabled) | **Confirmed: Appointment with {business} on {slot}**, with `appointment.ics` for any calendar (Google, Outlook, Apple) |
 | Booking cancelled | "Your appointment … has been cancelled" | **Cancelled: your appointment on {slot}**, with `cancel.ics` |
+| Offered a time but didn't confirm | Follow-up after 1 h and ~23 h: "Shall I book your free consultation for {slot}?" | — |
+| 15 min before the appointment | "A quick reminder: your appointment … starts in 15 minutes" | Reminder email, only if the chat platform doesn't allow the message |
+
+**Platform rules for messages the business starts:** WhatsApp, Messenger and Instagram allow free messages only within
+24 hours of the customer's last message, so follow-ups stay inside that window. A reminder that falls later is sent on
+Messenger as an appointment update, on WhatsApp with an approved template (Settings → *WhatsApp reminder template*),
+and otherwise by email. Timings and texts are editable in **Settings → Follow-ups & reminders**.
 
 The emails are sent from the client's notification address (SMTP settings) and contain **no internal notes or chat
 transcript**. The AI asks for the customer's name and email before booking. If the customer doesn't give an email, the
@@ -116,7 +149,7 @@ booking still happens, but only the chat confirmation is sent.
 
 ---
 
-## 5. The client's daily use (handover checklist)
+## 6. The client's daily use (handover checklist)
 
 Show the client these in a 20-minute session:
 
@@ -130,13 +163,15 @@ Show the client these in a 20-minute session:
 | Change what the bot says, without code | **Intents** (Save applies to the next message) |
 | Urgent keywords that always go to a human | **Rules** |
 | Opening hours, business info, voice, approval mode | **Settings** |
+| Follow-up and reminder timing and texts | **Settings → Follow-ups & reminders** |
+| Change a token, the email password, or reconnect Outlook | **Connections** |
 | Review replies before they are sent (for the first week) | **Settings → Require approval** |
 
 Suggest **Require approval = on** for the first few days, so the client builds trust in the replies, then turn it off.
 
 ---
 
-## 6. How the channels are monitored (for technical buyers)
+## 7. How the channels are monitored (for technical buyers)
 
 | Channel | Method | Latency |
 |---|---|---|
@@ -152,7 +187,7 @@ registration line. See ARCHITECTURE.md → *Adding a channel*.
 
 ---
 
-## 7. Go-live checklist
+## 8. Go-live checklist
 
 - [ ] Survey answers entered in **Settings** and **Intents**; *Check availability now* shows the calendar read OK.
 - [ ] **Test voice** and **Send test email** work.

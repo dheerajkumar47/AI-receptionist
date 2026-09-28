@@ -114,7 +114,10 @@ public sealed class SmtpOptions
 
     public bool IsConfigured =>
         (!string.IsNullOrWhiteSpace(Host) || !string.IsNullOrWhiteSpace(PickupDirectory)) &&
-        !string.IsNullOrWhiteSpace(FromAddress) && !string.IsNullOrWhiteSpace(OwnerAddress);
+        !string.IsNullOrWhiteSpace(Sender) && !string.IsNullOrWhiteSpace(OwnerAddress);
+
+    /// <summary>The From address: <see cref="FromAddress"/>, or the login <see cref="Username"/> when it is left empty.</summary>
+    public string? Sender => string.IsNullOrWhiteSpace(FromAddress) ? Username : FromAddress;
 }
 
 public sealed class MetaOptions
@@ -163,6 +166,9 @@ public sealed class WhatsAppOptions
 
     /// <summary>Phone number id (not the phone number) from WhatsApp &gt; API Setup.</summary>
     public string? PhoneNumberId { get; set; }
+
+    /// <summary>WhatsApp Business Account id; only needed to link the account to the app (subscribed_apps).</summary>
+    public string? BusinessAccountId { get; set; }
 }
 
 public sealed class TwitterOptions

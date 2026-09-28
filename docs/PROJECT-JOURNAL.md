@@ -190,6 +190,23 @@ Live data is in `/home/data` on the App Service (kept across restarts and deploy
 
 ---
 
+### 12. Connections page, follow-ups and reminders (28 Sep 2026)
+
+- **Dashboard → Connections**: every account (WhatsApp, Messenger, Instagram, Meta app, Outlook, Email, AI, Voice, X,
+  dashboard login) can be entered, tested and linked there; values are encrypted in `data/integrations.db` (key ring in
+  `data/keys`) and override Azure/user-secrets. *Save & apply* restarts the app on Azure (~30 s); locally, restart it.
+  The Azure settings pasted earlier keep working; nothing needs moving.
+- **Follow-ups**: a customer who was offered a time but didn't confirm ("let me check") gets a message after 60 min and
+  ~23 h (inside Meta's 24-hour window). New intent *ConfirmLater* was added automatically.
+- **Reminders**: 15 min before each appointment. Outside the 24-hour window: Messenger sends it as an event update,
+  WhatsApp needs an approved template, otherwise it is emailed.
+- **Optional WhatsApp template** (for reminders more than 24 h after the customer's last message): WhatsApp Manager →
+  Message templates → Create → Category *Utility*, name `appointment_reminder`, language English, body
+  `Hi {{1}}, a reminder: your appointment with {{2}} is at {{3}}.` → submit; when approved, enter the name in
+  Settings → Follow-ups & reminders → *WhatsApp reminder template*.
+
+---
+
 ## Troubleshooting (every problem hit so far)
 
 | Symptom | Cause | Fix |
@@ -208,6 +225,9 @@ Live data is in `/home/data` on the App Service (kept across restarts and deploy
 | WhatsApp: `0 message(s) queued` lines | Delivery/read receipts, which is normal | Ignore; the payload is logged below the line |
 | WhatsApp replies stop after a day | Temporary 24-hour token | Use the permanent system-user token (step 8.7) |
 | WhatsApp text arrives but no voice note | WhatsApp rejected the audio *link* | (Fixed in code) audio is now uploaded to WhatsApp and sent by media id: `git pull` |
+| Connections: saved but nothing changed | App not restarted yet | Azure restarts by itself in ~30 s; refresh. If not: Azure → your app → **Restart**. Locally: Ctrl+C and run again |
+| Connections: "Test" says 401/190 (Meta) | Token expired or wrong type | Generate a new system-user (WhatsApp) or Page token, paste, Test |
+| Reminder shows red "outside 24 hours" | Customer's last message was over a day ago | Normal: it is emailed instead (if the customer gave an email). For WhatsApp add the approved template (step 12) |
 | Customer got no email after an Outlook booking | Only the Outlook attendee invite was used (often not delivered, and it showed internal notes) | (Fixed in code) customers now get a clean confirmation email with `appointment.ics` via Gmail SMTP, and a cancellation email; Outlook attendee invites are off by default. The customer must give an email in the chat. Problems show in red on **Appointments** |
 | Voice note on Messenger/Instagram gets "team will contact you" | Messenger audio is MP4, which the old speech-to-text rejected | (Fixed in code) Azure fast transcription handles MP4/AAC/OGG/MP3: `git pull`. Unclear notes now get "could you type it instead?" |
 | Customers speak Urdu/English mixed | — | Set `Speech:RecognitionLanguage` to `en-US,ur-IN` (auto-detects between them) |
