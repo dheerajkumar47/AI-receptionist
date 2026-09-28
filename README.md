@@ -1,69 +1,124 @@
-# AI Receptionist (.NET 10 / C#)
+# AI Receptionist
 
-An AI receptionist that answers direct messages on **Facebook Messenger, Instagram, WhatsApp and X (Twitter)**.
-It works out what the sender wants, replies in natural language as **text and/or a synthesized voice note**,
-and books confirmed appointments straight into a **Microsoft 365 calendar**. If the calendar API is unavailable,
-it sends a **confirmation email with an .ics attachment** instead. A **Blazor admin dashboard** shows every
-message, lets you override replies, pause the bot per conversation, and edit intents, rules and settings without touching code.
+[![Build and deploy](https://github.com/dheerajkumar47/AI-receptionist/actions/workflows/deploy-azure.yml/badge.svg)](https://github.com/dheerajkumar47/AI-receptionist/actions/workflows/deploy-azure.yml)
+![.NET 10](https://img.shields.io/badge/.NET-10%20LTS-512BD4)
+![Blazor](https://img.shields.io/badge/dashboard-Blazor%20Server-5C2D91)
+![Azure](https://img.shields.io/badge/hosted%20on-Azure%20App%20Service-0078D4)
 
-![Dashboard](docs/images/conversation.png)
+An AI receptionist for small businesses that answers **WhatsApp, Facebook Messenger, Instagram and X** direct messages
+around the clock. It understands what the customer wants, replies in text or a natural **voice note**, books appointments
+straight into **Outlook / Microsoft 365**, emails the customer a confirmation, follows up when they go quiet and reminds
+them before the meeting. The owner watches and steers everything from a web dashboard, without touching code.
+
+![Dashboard](docs/images/dashboard.png)
 
 ## Features
 
 | Area | What it does |
 |---|---|
-| Social inboxes | Webhooks for Facebook Messenger, Instagram Direct and the WhatsApp Cloud API (with signature verification); polling for X DMs. New channels plug in by implementing one interface. |
-| Understanding | Azure OpenAI (or OpenAI) in JSON mode picks one of *your* intents, drafts the reply and extracts the time slot, name and email. An offline keyword engine runs when no LLM key is set. |
-| Conversation rules | Admin-defined rules (contains / exact / regex, per channel) run before the AI: force an intent, send a fixed reply, hand off to a human, or ignore. |
-| Voice | Azure AI Speech neural voices. Replies go out as native audio (an OGG/Opus voice note on WhatsApp, MP3 on Messenger and Instagram). X can't carry audio, so it gets text plus a link. Inbound WhatsApp voice notes are transcribed. |
-| Appointments | Free slots come from opening hours plus Microsoft 365 free/busy plus existing bookings. The bot offers a slot and waits for "yes", then checks the slot is still free before writing the event through Microsoft Graph. If Graph fails, it emails the owner (and customer) an .ics file. Customers can cancel too. |
-| Dashboard | Live message log, conversation threads with audio playback, manual replies, approval mode (drafts), human takeover, and editors for intents, rules, settings and appointments. A built-in simulator for rehearsals. |
-| Safety | Every AI-proposed time is checked against real availability. Duplicate webhooks are dropped. Dashboard login is protected by a cookie with an anti-forgery token. Tokens go in headers, never in URLs. |
+| **Social inboxes** | WhatsApp Cloud API, Messenger and Instagram via signed webhooks; X DMs by polling. New channels plug in through one interface. |
+| **Understanding** | Azure OpenAI (JSON mode) picks one of the business's own intents, drafts the reply and extracts the time, name and email. An offline keyword engine takes over when no AI key is set. |
+| **Voice** | Azure AI Speech neural voices: native voice notes on WhatsApp (OGG/Opus), audio on Messenger and Instagram. Inbound voice notes are transcribed on every channel (Urdu/English auto-detect supported). |
+| **Booking** | Offers real free slots (opening hours + Outlook free/busy + existing bookings), books only after the customer confirms, and re-checks the slot first. Falls back to email with an `.ics` file if the calendar is down. |
+| **Customer emails** | Clean confirmation and cancellation emails with calendar files; no internal notes are ever sent to the customer. |
+| **Follow-ups & reminders** | "Let me check and confirm" gets a polite reply and two follow-ups inside Meta's 24-hour window; a reminder goes out 15 minutes before each appointment. |
+| **Dashboard** | Live message log, conversation view with audio, manual replies (text or voice), human takeover, approval mode, appointments, a customer simulator, and editors for intents, rules and settings. |
+| **Connections** | Clients connect and **test** WhatsApp, Messenger, Instagram, Outlook, email and AI from the dashboard; values are stored encrypted. |
+| **Operations** | Every push to `main` is formatted, tested and deployed to Azure App Service by GitHub Actions. The SQLite database upgrades itself on start-up. |
 
-## Quick start (offline mode, about 2 minutes)
+## Screenshots
 
-Requirements: [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) and Visual Studio 2026 (or VS Code with C# Dev Kit / Rider).
+| Conversation with intent, confidence and booking | Connections: link accounts without code |
+|---|---|
+| ![Conversation](docs/images/conversation.png) | ![Connections](docs/images/connections.png) |
+| **Intents editable without code** | **Follow-ups and reminders** |
+| ![Intents](docs/images/intents.png) | ![Settings](docs/images/settings.png) |
 
-```bash
-git clone <this repo>
-cd AI-receptionist
-dotnet user-secrets set "Admin:Password" "choose-a-password" --project src/AiReceptionist.Web
-dotnet run --project src/AiReceptionist.Web
+## How it works
+
+```mermaid
+flowchart LR
+    C[Customer DM<br/>WhatsApp · Messenger · Instagram · X] -->|webhook / poll| Q[Inbound queue]
+    Q --> O[Conversation service]
+    O --> R{Rules}
+    R --> AI[Azure OpenAI<br/>intent + reply]
+    AI --> A{Action}
+    A -->|offer / confirm| CAL[Outlook calendar<br/>Microsoft Graph]
+    A -->|reply| V[Azure Speech<br/>voice note]
+    CAL -. fallback .-> M[Email + .ics]
+    V --> C
+    O --> D[(SQLite)]
+    D --> UI[Blazor dashboard]
+    S[Scheduler<br/>follow-ups · reminders] --> O
 ```
 
-Or open `AiReceptionist.sln` in Visual Studio and press **F5**. Browse to https://localhost:5001, sign in as `admin`,
-and open **Simulator**. Try *"Hi, can I book an appointment tomorrow afternoon?"* and then *"yes please"*.
+Details, design decisions and how to add a channel: **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
 
-With no keys configured, the app runs in offline mode: the keyword engine replaces the AI, replies are text only,
-and bookings fail gracefully (or land as `.eml` files if you set `Email:PickupDirectory`). Add credentials one
-service at a time as described in **[docs/SETUP.md](docs/SETUP.md)**. The dashboard home page shows which services are active.
+## Tech stack
+
+C# · .NET 10 (LTS) · ASP.NET Core minimal APIs · Blazor Server · EF Core + SQLite · Azure OpenAI · Azure AI Speech ·
+Microsoft Graph · MSAL · MailKit · Meta Graph API · xUnit · GitHub Actions · Azure App Service (Linux)
+
+## Quick start (offline, about 2 minutes)
+
+Requirements: [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) and Visual Studio 2026, VS Code with C# Dev Kit, or Rider.
+
+```bash
+git clone https://github.com/dheerajkumar47/AI-receptionist.git
+cd AI-receptionist
+dotnet user-secrets set "Admin:Password" "choose-a-password" --project src/AiReceptionist.Web
+dotnet run --project src/AiReceptionist.Web --launch-profile AiReceptionist.Web
+```
+
+Open https://localhost:5001, sign in as `admin`, go to **Simulator** and try *"Hi, can I book a call tomorrow afternoon?"*
+followed by *"yes please"*. Without keys the app runs in offline mode (keyword engine, text replies). Add services one at a
+time on the **Connections** page or as described in **[docs/SETUP.md](docs/SETUP.md)**.
+
+## Deploy
+
+Create a Linux Web App (.NET 10) on Azure, add the repository variable `AZURE_WEBAPP_NAME` and the secret
+`AZURE_WEBAPP_PUBLISH_PROFILE`, and run the **Deploy to Azure** workflow. Data is kept in `/home/data` across deployments.
+Full steps: [docs/SETUP.md §9](docs/SETUP.md#9-deploy-to-azure-app-service).
 
 ## Documentation
 
-- **[docs/SETUP.md](docs/SETUP.md)**: step-by-step setup for Azure OpenAI, Azure AI Speech, Microsoft 365 / Entra ID, SMTP, the Meta app (Facebook, Instagram, WhatsApp), X, the public webhook URL and Azure App Service deployment.
-- **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**: how a message flows through the system, the design decisions, and how to add a new channel.
-- **[docs/CLIENT-ONBOARDING.md](docs/CLIENT-ONBOARDING.md)**: setting it up for a client: the discovery survey, which accounts the client owns and how they give access, the setup runbook, the customer journey and the handover checklist.
-- **[docs/ACCEPTANCE-TEST.md](docs/ACCEPTANCE-TEST.md)**: the pre-flight checklist and the 15-minute acceptance script. It also includes a shot list for recording the demo video.
+| Guide | For |
+|---|---|
+| [SETUP.md](docs/SETUP.md) | Azure OpenAI, Speech, Outlook, email, Meta (WhatsApp, Messenger, Instagram), X, webhooks and Azure deployment |
+| [CLIENT-ONBOARDING.md](docs/CLIENT-ONBOARDING.md) | Setting it up for a client: discovery survey, account access, runbook, customer journey, handover |
+| [ARCHITECTURE.md](docs/ARCHITECTURE.md) | Message flow, design decisions, adding channels, scaling out |
+| [ACCEPTANCE-TEST.md](docs/ACCEPTANCE-TEST.md) | Pre-flight checklist, 15-minute acceptance script and demo shot list |
 
-## Solution layout
+## Project layout
 
 ```
 AiReceptionist.sln
-├─ src/AiReceptionist.Core            Domain model, EF Core DbContext, conversation orchestrator,
-│                                     rules, scheduling (hours, slots, booking + fallback), offline engine
-├─ src/AiReceptionist.Infrastructure  Azure OpenAI engine, Azure Speech TTS/STT, Microsoft Graph calendar,
-│                                     SMTP sender, Meta + X channel connectors, DI registration
-├─ src/AiReceptionist.Web             ASP.NET Core host: webhook endpoints, background workers,
-│                                     Blazor Server admin dashboard, login
-└─ tests/AiReceptionist.Tests         67 xUnit tests: booking flows, fallbacks, rules, parsers,
-                                      signatures, OAuth 1.0a, full webhook→reply integration test
+├─ src/AiReceptionist.Core            Domain, EF Core, conversation orchestrator, rules, scheduling,
+│                                     booking + email fallback, follow-ups and reminders, offline engine
+├─ src/AiReceptionist.Infrastructure  Azure OpenAI, Azure Speech, Microsoft Graph calendar, SMTP,
+│                                     Meta / X / Twilio channel connectors, dependency injection
+├─ src/AiReceptionist.Web             Host, webhook endpoints, background workers, Blazor dashboard,
+│                                     Connections page and encrypted settings store
+├─ tests/AiReceptionist.Tests         xUnit: booking flows, fallbacks, follow-ups, reminders, rules,
+│                                     parsers, signatures, schema upgrades, end-to-end webhook tests
+└─ .github/workflows                  Format check, tests and deployment to Azure App Service
 ```
 
-Run the tests with `dotnet test`.
+```bash
+dotnet test                          # run all tests
+dotnet format --verify-no-changes    # check formatting (also enforced in CI)
+```
 
 ## Known limitations
 
-- **Platform approval.** While a Meta app is in *Development* mode, only people with a role on the app (and, for WhatsApp test numbers, up to 5 registered recipients) can message the bot. Serving the public requires Meta App Review. See SETUP.md §6.
-- **X (Twitter) DMs** need a paid X API plan that includes Direct Message endpoints. Messages are polled every 60 s by default because X only offers DM webhooks on Enterprise plans.
-- **Scale.** The app uses one instance with SQLite and an in-memory queue. That suits a single business. To scale out, swap in SQL Server/PostgreSQL and a durable queue; the interfaces are already in place (see ARCHITECTURE.md).
-- **Voice-note transcription** only covers WhatsApp's OGG/Opus notes. Audio sent on Messenger or Instagram is stored and flagged for a human.
+- **Meta approval.** While the Meta app is unpublished, only people with a role on it (and up to 5 WhatsApp test numbers)
+  can use the bot. Instagram DMs from the public, and Messenger for everyone, need business verification and App Review.
+- **24-hour window.** WhatsApp, Messenger and Instagram only allow free-form messages within 24 hours of the customer's last
+  message; later reminders use Messenger's event-update tag, an approved WhatsApp template, or email.
+- **X DMs** require a paid X API plan and are polled every 60 seconds.
+- **Scale.** One instance with SQLite and an in-memory queue suits a single business per deployment. See ARCHITECTURE.md
+  for scaling out.
+
+---
+
+Built by [Dheeraj Kumar](https://github.com/dheerajkumar47) · Dheeraj Software Solutions

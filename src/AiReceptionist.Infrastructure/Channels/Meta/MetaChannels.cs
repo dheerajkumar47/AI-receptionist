@@ -2,9 +2,9 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using AiReceptionist.Core.Abstractions;
-using ChannelIds = AiReceptionist.Core.Domain.Channels;
 using AiReceptionist.Infrastructure.Voice;
 using Microsoft.Extensions.Options;
+using ChannelIds = AiReceptionist.Core.Domain.Channels;
 
 namespace AiReceptionist.Infrastructure.Channels.Meta;
 

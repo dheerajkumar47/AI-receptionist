@@ -78,7 +78,10 @@ public static class SeedData
 
     private static IntentDefinition ConfirmLaterIntent => new()
     {
-        Name = "ConfirmLater", SortOrder = 8, Action = IntentAction.Reply, ReplyMode = ReplyMode.Text,
+        Name = "ConfirmLater",
+        SortOrder = 8,
+        Action = IntentAction.Reply,
+        ReplyMode = ReplyMode.Text,
         Description = "The person needs time before confirming the offered slot (will check and confirm later).",
         Examples = "wait\nlet me check and confirm\nI'll confirm later\nI will let you know\ngive me some time\nlet me check my schedule\nI'll get back to you\nmaybe later",
         Guidance = "Say there is no rush and that they can simply reply here when they are ready. Do not book anything and do not claim the slot is reserved.",

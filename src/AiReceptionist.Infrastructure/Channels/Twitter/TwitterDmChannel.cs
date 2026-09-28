@@ -3,9 +3,9 @@ using System.Net.Http.Json;
 using System.Numerics;
 using System.Text.Json;
 using AiReceptionist.Core.Abstractions;
-using ChannelIds = AiReceptionist.Core.Domain.Channels;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using ChannelIds = AiReceptionist.Core.Domain.Channels;
 
 namespace AiReceptionist.Infrastructure.Channels.Twitter;
 

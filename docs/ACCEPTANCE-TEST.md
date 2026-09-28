@@ -56,5 +56,4 @@ and Outlook calendar in a third window. Aim for about 3 minutes:
 6. Dashboard: open the conversation, show the log with intents and confidence, send a manual voice reply (30 s).
 7. Intents page: change a reply live (15 s).
 
-`docs/media/offline-walkthrough.webm` is a recording of the dashboard and simulator running without any cloud keys
-(offline engine, email-fallback booking). It shows the UI flow. The live demo above needs your own tenant and accounts.
+The **Simulator** page runs the same flow without any social account, which is handy for rehearsing before recording.

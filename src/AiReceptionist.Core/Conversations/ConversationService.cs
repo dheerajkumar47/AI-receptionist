@@ -616,17 +616,17 @@ public sealed partial class ConversationService
 
     private static Dictionary<string, string?> TemplateValues(BotSettings settings, Contact contact, string channel,
         DateTime? pendingSlot, Availability availability) => new()
-    {
-        ["business"] = settings.BusinessName,
-        ["name"] = FirstName(contact.DisplayName),
-        ["fullname"] = string.IsNullOrWhiteSpace(contact.DisplayName) ? "customer" : contact.DisplayName.Trim(),
-        ["channel"] = channel,
-        ["hours"] = settings.BusinessHours,
-        ["slot"] = pendingSlot is { } p
+        {
+            ["business"] = settings.BusinessName,
+            ["name"] = FirstName(contact.DisplayName),
+            ["fullname"] = string.IsNullOrWhiteSpace(contact.DisplayName) ? "customer" : contact.DisplayName.Trim(),
+            ["channel"] = channel,
+            ["hours"] = settings.BusinessHours,
+            ["slot"] = pendingSlot is { } p
             ? SlotFormatter.Friendly(p, availability.TimeZone)
             : availability.OpenSlots.Count > 0 ? SlotFormatter.Friendly(availability.OpenSlots[0].StartUtc, availability.TimeZone) : "",
-        ["slots"] = string.Join(", ", availability.Nearest(null, 3).Select(s => SlotFormatter.Friendly(s.StartUtc, availability.TimeZone))),
-    };
+            ["slots"] = string.Join(", ", availability.Nearest(null, 3).Select(s => SlotFormatter.Friendly(s.StartUtc, availability.TimeZone))),
+        };
 
     private static string UnavailableReply(BotSettings settings, Dictionary<string, string?> values, Availability availability, DateTime requested)
     {

@@ -416,8 +416,11 @@ public class TwilioWhatsAppTests
     {
         var form = new Dictionary<string, string>
         {
-            ["CallSid"] = "CA1234567890ABCDE", ["Digits"] = "1234", ["From"] = "+14158675309",
-            ["To"] = "+18005551212", ["Caller"] = "+14158675309",
+            ["CallSid"] = "CA1234567890ABCDE",
+            ["Digits"] = "1234",
+            ["From"] = "+14158675309",
+            ["To"] = "+18005551212",
+            ["Caller"] = "+14158675309",
         };
         Assert.Equal("RSOYDt4T1cUTdK1PDd93/VVr8B8=",
             AiReceptionist.Infrastructure.Channels.Twilio.TwilioWhatsAppChannel.Sign("https://mycompany.com/myapp.php?foo=1&bar=2", form, "12345"));
@@ -500,7 +503,8 @@ public class WhatsAppAudioUploadTests
         var graph = new Graph();
         var channel = new WhatsAppChannel(new Factory(graph), Microsoft.Extensions.Options.Options.Create(new AiReceptionist.Infrastructure.MetaOptions
         {
-            AppSecret = "s", VerifyToken = "v",
+            AppSecret = "s",
+            VerifyToken = "v",
             WhatsApp = new AiReceptionist.Infrastructure.WhatsAppOptions { AccessToken = "t", PhoneNumberId = "PNID" },
         }), media);
 
@@ -563,7 +567,8 @@ public class InstagramSecretTests
     {
         var channel = new InstagramChannel(new NoHttp(), Microsoft.Extensions.Options.Options.Create(new AiReceptionist.Infrastructure.MetaOptions
         {
-            AppSecret = "meta-secret", VerifyToken = "v",
+            AppSecret = "meta-secret",
+            VerifyToken = "v",
             Instagram = new AiReceptionist.Infrastructure.InstagramOptions { AccessToken = "t", ApiBaseUrl = "https://graph.instagram.com", AppSecret = "ig-secret" },
         }));
         var body = Encoding.UTF8.GetBytes("{\"object\":\"instagram\"}");

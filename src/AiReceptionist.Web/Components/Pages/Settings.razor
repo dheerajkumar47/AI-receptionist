@@ -65,8 +65,8 @@
             WhatsApp, Messenger and Instagram only allow messages within 24 hours of the customer's last message, so keep both
             follow-ups under 1440 minutes. Not sent while <em>Require approval</em> is on.
         </p>
+        <label class="check spaced"><input type="checkbox" @bind="_s.FollowUpsEnabled" /> Follow up on unconfirmed offers</label>
         <div class="form-grid">
-            <label class="check"><input type="checkbox" @bind="_s.FollowUpsEnabled" /> Follow up on unconfirmed offers</label>
             <label>1st follow-up after (minutes)<input type="number" min="5" max="1435" @bind="_s.FollowUp1Minutes" /></label>
             <label>2nd follow-up after (minutes)<input type="number" min="0" max="1435" @bind="_s.FollowUp2Minutes" /></label>
         </div>
@@ -74,8 +74,8 @@
             <label>1st follow-up <span class="small muted">{name} {slot} {business}</span><textarea rows="2" @bind="_s.FollowUp1Message"></textarea></label>
             <label>2nd follow-up <span class="small muted">(0 minutes = don't send)</span><textarea rows="2" @bind="_s.FollowUp2Message"></textarea></label>
         </div>
+        <label class="check spaced"><input type="checkbox" @bind="_s.RemindersEnabled" /> Remind customers before appointments</label>
         <div class="form-grid">
-            <label class="check"><input type="checkbox" @bind="_s.RemindersEnabled" /> Remind customers before appointments</label>
             <label>Minutes before<input type="number" min="1" max="1440" @bind="_s.ReminderMinutesBefore" /></label>
         </div>
         <label>Reminder message <span class="small muted">{name} {slot} {minutes} {business}</span><textarea rows="2" @bind="_s.ReminderMessage"></textarea></label>
